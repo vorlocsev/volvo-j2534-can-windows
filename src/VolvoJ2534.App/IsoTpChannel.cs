@@ -99,7 +99,7 @@ internal sealed class IsoTpChannel
 
         while (true)
         {
-            var frame = ReadMatchingCanFrame(_options.ResponseId, deadline, cancellationToken);
+            var frame = ReadMatchingCanFrame(_options.ResponseId, MinDeadline(deadline, _options.EffectiveConsecutiveFrameTimeout), cancellationToken);
 
             if (!IsoTp.TryDecode(frame, out var iso, out var error))
                 throw new InvalidOperationException(error);
@@ -127,7 +127,7 @@ internal sealed class IsoTpChannel
                     var receivedInBlock = 0;
                     while (true)
                     {
-                        frame = ReadMatchingCanFrame(_options.ResponseId, deadline, cancellationToken);
+                        frame = ReadMatchingCanFrame(_options.ResponseId, MinDeadline(deadline, _options.EffectiveConsecutiveFrameTimeout), cancellationToken);
 
                         if (!IsoTp.TryDecode(frame, out iso, out error))
                             throw new InvalidOperationException(error);
@@ -172,7 +172,7 @@ internal sealed class IsoTpChannel
 
         while (true)
         {
-            var frame = ReadMatchingCanFrame(_options.ResponseId, deadline, cancellationToken);
+            var frame = ReadMatchingCanFrame(_options.ResponseId, MinDeadline(deadline, _options.EffectiveFlowControlTimeout), cancellationToken);
 
             if (!IsoTp.TryDecode(frame, out var iso, out var error))
                 throw new InvalidOperationException(error);
@@ -329,6 +329,13 @@ internal sealed class IsoTpChannel
         if (id > max)
             throw new ArgumentOutOfRangeException(parameterName,
                 $"CAN ID must be <= 0x{max:X} for {(extended ? "29-bit" : "11-bit")} addressing.");
+    }
+
+    private static long MinDeadline(long globalDeadline, TimeSpan stageTimeout)
+    {
+        var stageTicks = ToTimestampTicks(stageTimeout);
+        var candidate = Stopwatch.GetTimestamp() + stageTicks;
+        return Math.Min(globalDeadline, candidate);
     }
 
     private static TimeSpan Remaining(long deadline)
