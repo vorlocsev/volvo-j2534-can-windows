@@ -158,7 +158,7 @@ public sealed partial class MainWindow : Window
             SetStatus(operation + "...");
 
             var data = await Task.Run(() => action(client));
-            SetStatus(operation + ": " + BitConverter.ToString(data).Replace('-', ' '));
+            SetStatus(operation + ": " + data);
         }
         catch (UdsNegativeResponseException ex)
         {
