@@ -1,74 +1,53 @@
 # Volvo J2534 CAN Monitor — WinUI 3 x86
 
-Windows 11 diagnostic/CAN monitor for Volvo interfaces using the SAE J2534 API.
+Windows diagnostic/CAN monitor for Volvo interfaces using SAE J2534.
 
 ## Supported interfaces
+
 - Volvo DiCE
 - Mongoose JLR Pro
 
-Drivers and proprietary DLLs are installed separately.
+Drivers and proprietary J2534 DLLs are installed separately.
 
-## Scope
-Read-only CAN diagnostics, monitoring and logging. This project does not implement CEM PIN extraction, immobilizer unlocking or PIN brute forcing.
+## Current scope
 
-## Build
-Requirements: Windows 11, Visual Studio 2022, CMake 3.24+.
+- J2534 DLL loading
+- device open/close
+- CAN 500 / 250 / 125 kbit/s
+- live CAN capture
+- basic filtering
+- frame-rate/count statistics
+- CSV export
 
-```powershell
-cmake -S . -B build -A x64
-cmake --build build --config Release
+No immobilizer/PIN extraction, brute forcing, security bypass, or automated security-key calculation is implemented.
+
+## Architecture
+
+The supported application is the C# WinUI 3 project under `src/VolvoJ2534.App`.
+
+```
+WinUI 3
+  ↓
+J2534Native
+  ↓
+Vendor J2534 DLL
+  ↓
+DiCE / Mongoose
+  ↓
+CAN
 ```
 
-For legacy 32-bit J2534 DLLs:
-```powershell
-cmake -S . -B build-x86 -A Win32
-cmake --build build-x86 --config Release
-```
-
-The application accepts the J2534 DLL path explicitly so it does not assume a proprietary installation layout.
-
-
-## GUI
-
-The Windows application now starts as a native Win32 GUI.
-
-Features:
-- J2534 DLL path with **Browse**
-- CAN bitrate: 500 / 250 / 125 kbit/s
-- Connect / Disconnect
-- Start / Stop CAN monitoring
-- live CAN frame table with timestamp, ID, DLC and data
-- hexadecimal CAN-ID filter
-- clear capture
-- CSV logging
-- status/error display
-
-### Important: DLL architecture
-
-The application architecture must match the J2534 DLL:
-- **x64 build** -> use a 64-bit J2534 DLL
-- **Win32 build** -> use a 32-bit J2534 DLL
-
-For older Volvo DiCE installations this can be important because legacy DiCE software may provide a 32-bit DLL.
-
-### Running
-
-After building, launch:
-
-`build\Release\volvo-j2534-can.exe`
-
-Select the vendor J2534 DLL with **Browse**, select the CAN bitrate, then press **Connect** and **Start**.
-
-The application does not bundle or install proprietary DiCE/Mongoose drivers.
-
-
-The supported application is WinUI 3, .NET 8 and x86-only (32-bit). The app loads only 32-bit vendor J2534 DLLs.
-
-## Scope
-Read-only CAN monitoring and CSV logging. No immobilizer/PIN extraction, brute forcing, security bypass, or transmit controls are implemented.
+There is now one J2534 backend. The old C++/Win32 backend was removed to avoid two independent implementations.
 
 ## Build
-Requirements: Windows 11, Visual Studio 2022, .NET 8 SDK, Windows App SDK support.
+
+Requirements:
+
+- Windows 11
+- Visual Studio 2022
+- .NET 8 SDK
+- Windows App SDK 1.8
+- x86 build for legacy 32-bit J2534 DLLs
 
 ```powershell
 dotnet restore .\src\VolvoJ2534.App\VolvoJ2534.App.csproj
@@ -76,8 +55,14 @@ dotnet build .\src\VolvoJ2534.App\VolvoJ2534.App.csproj -c Release -p:Platform=x
 dotnet publish .\src\VolvoJ2534.App\VolvoJ2534.App.csproj -c Release -r win-x86 --self-contained true
 ```
 
-## UI
-J2534 DLL selection, CAN speed 500/250/125 kbit/s, Connect/Disconnect, Start/Stop, live CAN table, hexadecimal ID filter, frame rate, frame count, Clear and CSV export.
+The process is x86, so it can load 32-bit J2534 DLLs but not 64-bit-only DLLs.
 
-## Important
-The process is 32-bit. A 64-bit-only J2534 DLL cannot be loaded. The old C++/Win32 source remains only as historical source; the supported application is src/VolvoJ2534.App and the solution is x86-only.
+## Next architecture steps
+
+1. Correct CAN arbitration-ID decoding.
+2. Standard/extended CAN support.
+3. J2534 hardware filters.
+4. Automatic J2534 device discovery.
+5. ISO-TP transport.
+6. UDS diagnostic layer.
+7. Volvo ECU profiles.
