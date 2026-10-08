@@ -26,17 +26,85 @@ public sealed partial class MainWindow : Window
     private int _total;
     private readonly Stopwatch _rate = new();
     private readonly SemaphoreSlim _udsGate = new(1, 1);
+    private readonly ObservableCollection<EcuRow> _ecus = new();
     private int _rateFrames;
 
     public MainWindow()
     {
         InitializeComponent();
         FramesView.ItemsSource = _frames;
+        EcusView.ItemsSource = _ecus;
         _session.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
         Closed += (_, _) => { StopMonitor(); _udsGate.Dispose(); _session.Dispose(); };
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
+
+
+    private sealed class EcuRow
+    {
+        public UdsEcuCandidate Candidate { get; }
+        public string Response => Candidate.ResponseId.ToString("X3");
+        public string Request => Candidate.RequestId.ToString("X3");
+        public string Type => Candidate.IsExtended ? "29-bit" : "11-bit";
+        public int Frames => Candidate.ResponseCount;
+        public string MaxPayload => Candidate.MaxDataLength?.ToString() ?? "-";
+
+        internal EcuRow(UdsEcuCandidate candidate) => Candidate = candidate;
+    }
+
+    private async void Discover_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_connected) return;
+
+        DiscoverButton.IsEnabled = false;
+        DiscoveryStatus.Text = "Scanning...";
+        _ecus.Clear();
+        EcuSelector.Items.Clear();
+
+        try
+        {
+            var discovery = new UdsEcuDiscovery(_session.Bus);
+            var found = await discovery.ScanAsync(TimeSpan.FromSeconds(8));
+
+            foreach (var candidate in found)
+            {
+                var row = new EcuRow(candidate);
+                _ecus.Add(row);
+                EcuSelector.Items.Add($"{row.Request} → {row.Response}");
+            }
+
+            DiscoveryStatus.Text = found.Count == 0
+                ? "No standard UDS responses"
+                : $"{found.Count} ECU(s) found";
+
+            SetStatus("ECU discovery complete.");
+        }
+        catch (OperationCanceledException)
+        {
+            DiscoveryStatus.Text = "Cancelled";
+        }
+        catch (Exception ex)
+        {
+            DiscoveryStatus.Text = "Failed";
+            SetStatus("ECU discovery failed: " + ex.Message);
+        }
+        finally
+        {
+            DiscoverButton.IsEnabled = _connected;
+        }
+    }
+
+    private void Ecu_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (EcusView.SelectedItem is not EcuRow row)
+            return;
+
+        UdsRequestId.Text = row.Candidate.RequestId.ToString("X3");
+        UdsResponseId.Text = row.Candidate.ResponseId.ToString("X3");
+        if (EcuSelector.SelectedIndex >= 0)
+            EcuSelector.SelectedIndex = EcusView.SelectedIndex;
+    }
 
     private void SetUdsEnabled(bool enabled)
     {
@@ -191,7 +259,7 @@ public sealed partial class MainWindow : Window
         if (_connected)
         {
             StopMonitor(); _session.Disconnect(); _connected = false;
-            ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetUdsEnabled(false); SetStatus("Disconnected");
+            ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetUdsEnabled(false); DiscoverButton.IsEnabled = false; SetStatus("Disconnected");
             return;
         }
 
@@ -202,7 +270,7 @@ public sealed partial class MainWindow : Window
         { SetStatus("Connection failed: " + error); return; }
 
         _connected = true;
-        ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true; SetUdsEnabled(true);
+        ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true; SetUdsEnabled(true); DiscoverButton.IsEnabled = true;
         SetStatus("Connected · J2534 · CAN");
         await Task.CompletedTask;
     }
