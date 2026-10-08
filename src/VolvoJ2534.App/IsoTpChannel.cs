@@ -99,7 +99,7 @@ internal sealed class IsoTpChannel
 
         while (true)
         {
-            var frame = ReadMatchingCanFrame(_options.ResponseId, MinDeadline(deadline, _options.EffectiveConsecutiveFrameTimeout), cancellationToken);
+            var frame = ReadMatchingCanFrame(_options.ResponseId, MinDeadline(deadline, _options.EffectiveFrameTimeout), cancellationToken);
 
             if (!IsoTp.TryDecode(frame, out var iso, out var error))
                 throw new InvalidOperationException(error);
