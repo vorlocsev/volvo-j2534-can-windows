@@ -29,6 +29,11 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         FramesView.ItemsSource = _frames;
+        Closed += (_, _) =>
+        {
+            StopMonitor();
+            _j.Dispose();
+        };
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
@@ -175,10 +180,4 @@ public sealed partial class MainWindow : Window
         SetStatus("CSV saved: " + file.Path);
     }
 
-    protected override void OnClosed(ClosedEventArgs args)
-    {
-        StopMonitor();
-        _j.Dispose();
-        base.OnClosed(args);
-    }
 }
