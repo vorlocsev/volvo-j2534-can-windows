@@ -14,9 +14,6 @@ public sealed class UdsEcuDiscoveryTests
         Assert.Equal(4, candidate.ResponseCount);
         Assert.Equal(8, candidate.MaxDataLength);
     }
-}
-
-
     [Fact]
     public void GuessRequestId_MapsStandardResponse()
     {
@@ -54,3 +51,6 @@ public sealed class UdsEcuDiscoveryTests
         Assert.True(VolvoJ2534.App.UdsEcuDiscovery.IsLikelyUdsResponse(negative, out var negativeSid));
         Assert.Equal((byte)0x7F, negativeSid);
     }
+
+
+}
