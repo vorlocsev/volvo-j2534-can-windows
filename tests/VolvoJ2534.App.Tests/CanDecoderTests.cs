@@ -36,4 +36,37 @@ public sealed class CanDecoderTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             VolvoJ2534.App.CanDecoder.Encode(0x800, Array.Empty<byte>()));
     }
+
+    [Fact]
+    public void Decode_RejectsElevenBitIdWithoutExtendedFlag()
+    {
+        var message = new VolvoJ2534.App.J2534Native.PassthruMsg
+        {
+            ProtocolID = VolvoJ2534.App.J2534Native.ProtocolCan,
+            DataSize = 4
+        };
+
+        message.Data[0] = 0x00;
+        message.Data[1] = 0x00;
+        message.Data[2] = 0x08;
+        message.Data[3] = 0x00;
+
+        Assert.False(
+            VolvoJ2534.App.CanDecoder.TryDecode(message, out _, out var error));
+        Assert.Contains("CAN_29BIT_ID", error);
+    }
+
+    [Fact]
+    public void Decode_RejectsOversizedClassicCanMessage()
+    {
+        var message = new VolvoJ2534.App.J2534Native.PassthruMsg
+        {
+            ProtocolID = VolvoJ2534.App.J2534Native.ProtocolCan,
+            DataSize = 13
+        };
+
+        Assert.False(
+            VolvoJ2534.App.CanDecoder.TryDecode(message, out _, out var error));
+        Assert.Contains("expected 4..12", error);
+    }
 }
