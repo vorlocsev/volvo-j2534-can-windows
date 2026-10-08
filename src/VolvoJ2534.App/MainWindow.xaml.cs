@@ -20,7 +20,9 @@ public sealed partial class MainWindow : Window
 
     private readonly ObservableCollection<Frame> _frames = new();
     private readonly J2534Native _j = new();
+    private readonly CanRxDispatcher _rxDispatcher;
     private CancellationTokenSource? _cts;
+    private Task? _monitorTask;
     private bool _connected;
     private int _total;
     private readonly Stopwatch _rate = new();
@@ -30,7 +32,9 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         FramesView.ItemsSource = _frames;
-        Closed += (_, _) => { StopMonitor(); _j.Dispose(); };
+        _rxDispatcher = new CanRxDispatcher(_j);
+        _rxDispatcher.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
+        Closed += (_, _) => { StopMonitor(); _rxDispatcher.Dispose(); _j.Dispose(); };
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
@@ -39,7 +43,7 @@ public sealed partial class MainWindow : Window
     {
         if (_connected)
         {
-            StopMonitor(); _j.Unload(); _connected = false;
+            StopMonitor(); _rxDispatcher.Stop(); _j.Unload(); _connected = false;
             ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetStatus("Disconnected");
             return;
         }
@@ -53,7 +57,9 @@ public sealed partial class MainWindow : Window
         if (!_j.Connect(baud, out error))
         { _j.Unload(); SetStatus("CAN connect failed: " + error); return; }
 
-        _connected = true; ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true;
+        _connected = true;
+        _rxDispatcher.Start();
+        ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true;
         SetStatus("Connected · J2534 · CAN");
         await Task.CompletedTask;
     }
@@ -63,34 +69,48 @@ public sealed partial class MainWindow : Window
 
     private void StartMonitor()
     {
-        if (!_connected) return;
-        _cts = new CancellationTokenSource(); StartButton.Content = "Stop monitor";
-        SetStatus("Monitoring CAN..."); _rate.Restart(); _rateFrames = 0;
-        _ = Task.Run(() => ReadLoop(_cts.Token));
+        if (!_connected || _monitorTask is not null) return;
+
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        var subscription = _rxDispatcher.Subscribe();
+
+        StartButton.Content = "Stop monitor";
+        SetStatus("Monitoring CAN...");
+        _rate.Restart();
+        _rateFrames = 0;
+
+        _monitorTask = Task.Run(() =>
+        {
+            try { ReadLoop(subscription, token); }
+            finally { subscription.Dispose(); }
+        });
     }
 
     private void StopMonitor()
     {
-        _cts?.Cancel(); _cts = null; StartButton.Content = "Start monitor";
+        _cts?.Cancel();
+        _cts = null;
+        StartButton.Content = "Start monitor";
+
+        var task = _monitorTask;
+        _monitorTask = null;
+
+        if (task is not null && !task.IsCompleted)
+        {
+            try { task.Wait(TimeSpan.FromSeconds(1)); }
+            catch (AggregateException) { }
+        }
+
         if (_connected) SetStatus("Connected");
     }
 
-    private unsafe void ReadLoop(CancellationToken token)
+    private void ReadLoop(CanRxDispatcher.Subscription subscription, CancellationToken token)
     {
         while (!token.IsCancellationRequested)
         {
-            if (!_j.Read(out var message, 250, out var error))
-            {
-                if (!string.IsNullOrEmpty(error))
-                    DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + error));
+            if (!subscription.TryRead(TimeSpan.FromMilliseconds(250), token, out var canFrame))
                 continue;
-            }
-
-            if (!CanDecoder.TryDecode(message, out var canFrame, out error))
-            {
-                DispatcherQueue.TryEnqueue(() => SetStatus("CAN decode error: " + error));
-                continue;
-            }
 
             var frame = new Frame
             {
