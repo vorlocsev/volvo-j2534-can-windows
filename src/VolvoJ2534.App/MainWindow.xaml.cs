@@ -45,7 +45,7 @@ public sealed partial class MainWindow : Window
     {
         public UdsEcuCandidate Candidate { get; }
         public string Response => Candidate.ResponseId.ToString("X3");
-        public string Request => Candidate.RequestId.ToString("X3");
+        public string Request => Candidate.RequestId?.ToString("X") ?? "-";
         public string Type => Candidate.IsExtended ? "29-bit" : "11-bit";
         public int Frames => Candidate.ResponseCount;
         public string MaxPayload => Candidate.MaxDataLength?.ToString() ?? "-";
@@ -121,15 +121,16 @@ public sealed partial class MainWindow : Window
 
     private void ApplyEcuSelection(EcuRow row, int index)
     {
-        UdsRequestId.Text = row.Candidate.RequestId.ToString("X3");
-        UdsResponseId.Text = row.Candidate.ResponseId.ToString("X3");
+        if (row.Candidate.RequestId is uint requestId)
+            UdsRequestId.Text = requestId.ToString(row.Candidate.IsExtended ? "X8" : "X3");
+        UdsResponseId.Text = row.Candidate.ResponseId.ToString(row.Candidate.IsExtended ? "X8" : "X3");
 
         if (EcuSelector.SelectedIndex != index)
             EcuSelector.SelectedIndex = index;
 
         EcuInfoText.Text =
-            $"Request: 0x{row.Candidate.RequestId:X3}  ·  " +
-            $"Response: 0x{row.Candidate.ResponseId:X3}  ·  " +
+            $"Request: {(row.Candidate.RequestId is uint requestId ? $"0x{requestId:X}" : "unknown")}  ·  " +
+            $"Response: 0x{row.Candidate.ResponseId:X}  ·  " +
             $"Type: {(row.Candidate.IsExtended ? "29-bit" : "11-bit")}  ·  " +
             $"Observed frames: {row.Candidate.ResponseCount}  ·  " +
             $"Max payload: {row.Candidate.MaxDataLength?.ToString() ?? "-"} bytes";
@@ -160,11 +161,13 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
+        var canExtendedId = requestId > 0x7FF || responseId > 0x7FF;
+
         try
         {
             var channel = new IsoTpChannel(
                 _session.Bus,
-                new IsoTpChannel.Options(requestId, responseId));
+                new IsoTpChannel.Options(requestId, responseId, canExtendedId));
 
             client = new UdsClient(channel);
             return true;
@@ -185,9 +188,9 @@ public sealed partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(value) ||
             !uint.TryParse(value, System.Globalization.NumberStyles.HexNumber,
                 System.Globalization.CultureInfo.InvariantCulture, out id) ||
-            id > 0x7FF)
+            id > 0x1FFFFFFF)
         {
-            error = "CAN ID must be a valid 11-bit hexadecimal value (000-7FF).";
+            error = "CAN ID must be a valid 11-bit or 29-bit hexadecimal value (000-1FFFFFFF).";
             return false;
         }
 
