@@ -7,7 +7,7 @@ internal sealed class IsoTpChannel : IDisposable
     internal sealed record Options(
         uint RequestId,
         uint ResponseId,
-        bool ExtendedAddressing = false,
+        bool CanExtendedId = false,
         byte RxBlockSize = 0,
         byte RxSeparationTime = 0,
         TimeSpan FrameTimeout = default,
@@ -39,8 +39,11 @@ internal sealed class IsoTpChannel : IDisposable
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _rx = _bus.Subscribe();
 
-        ValidateId(_options.RequestId, _options.ExtendedAddressing, nameof(options.RequestId));
-        ValidateId(_options.ResponseId, _options.ExtendedAddressing, nameof(options.ResponseId));
+        // CAN Extended ID (29-bit) is independent from ISO-TP extended
+        // addressing (an additional address byte in the CAN data field).
+        // This channel currently implements ISO-TP normal addressing only.
+        ValidateId(_options.RequestId, _options.CanExtendedId, nameof(options.RequestId));
+        ValidateId(_options.ResponseId, _options.CanExtendedId, nameof(options.ResponseId));
 
         if (_options.MaxWaitFlowControls < 0)
             throw new ArgumentOutOfRangeException(nameof(options.MaxWaitFlowControls));
@@ -159,7 +162,6 @@ internal sealed class IsoTpChannel : IDisposable
                 }
 
                 case IsoTpFrameType.FlowControl:
-                    // A Flow Control belonging to another exchange is not an application payload.
                     continue;
 
                 default:
@@ -230,7 +232,7 @@ internal sealed class IsoTpChannel : IDisposable
                 throw new TimeoutException("ISO-TP receive timeout expired.");
 
             if (frame.ArbitrationId != expectedId ||
-                frame.IsExtended != _options.ExtendedAddressing ||
+                frame.IsExtended != _options.CanExtendedId ||
                 frame.IsRemote)
                 continue;
 
@@ -256,7 +258,7 @@ internal sealed class IsoTpChannel : IDisposable
         if (!_bus.Send(
                 id,
                 data,
-                _options.ExtendedAddressing,
+                _options.CanExtendedId,
                 remaining,
                 cancellationToken,
                 out var error))
@@ -321,7 +323,7 @@ internal sealed class IsoTpChannel : IDisposable
         var max = extended ? 0x1FFFFFFFu : 0x7FFu;
         if (id > max)
             throw new ArgumentOutOfRangeException(parameterName,
-                $"CAN ID must be <= 0x{max:X} for {(extended ? "29-bit" : "11-bit")} addressing.");
+                $"CAN ID must be <= 0x{max:X} for {(extended ? "29-bit" : "11-bit")} CAN IDs.");
     }
 
     private static long MinDeadline(long globalDeadline, TimeSpan stageTimeout)
@@ -339,5 +341,6 @@ internal sealed class IsoTpChannel : IDisposable
 
     private static long ToTimestampTicks(TimeSpan value)
         => checked((long)(value.TotalSeconds * Stopwatch.Frequency));
+
     public void Dispose() => _rx.Dispose();
 }
