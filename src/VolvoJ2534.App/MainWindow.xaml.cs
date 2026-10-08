@@ -81,7 +81,7 @@ public sealed partial class MainWindow : Window
             }
 
             DiscoveryStatus.Text = found.Count == 0
-                ? "No standard UDS responses"
+                ? "No UDS responses observed"
                 : $"{found.Count} ECU(s) found";
 
             SetStatus("ECU discovery complete.");
