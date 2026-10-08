@@ -104,3 +104,10 @@ var channel = new IsoTpChannel(
 `IsoTpChannel.Request(...)` is synchronous and expects exclusive ownership of the J2534 receive queue while the transaction is running. A parallel CAN monitor must not consume the same J2534 RX messages during an ISO-TP exchange.
 
 The channel is transport-only. It does not implement UDS security access, PIN extraction, key calculation, or other immobilizer/security bypass operations.
+### Shared CAN RX dispatcher
+
+`CanRxDispatcher` is now the single owner of `PassThruReadMsgs`. It continuously reads the J2534 RX queue and fans out decoded `CanFrame` instances to independent subscriptions.
+
+The CAN monitor and `IsoTpChannel` therefore no longer compete for the same J2534 receive queue. An ISO-TP transaction can consume only its own subscribed frames while the monitor receives the same traffic independently.
+
+The dispatcher must be started after `PassThruConnect` and stopped before the J2534 channel is disconnected.
