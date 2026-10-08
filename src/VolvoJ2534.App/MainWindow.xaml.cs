@@ -101,22 +101,23 @@ public sealed partial class MainWindow : Window
     {
         if (!TryParseDid(out var did)) return;
 
-        await RunUdsOperationAsync("Read DID", client => client.ReadDataByIdentifier(did));
+        await RunUdsOperationAsync("Read DID", client => Hex(client.ReadDataByIdentifier(did)));
     }
 
     private async void ReadVin_Click(object sender, RoutedEventArgs e)
     {
         await RunUdsOperationAsync("Read VIN", client =>
         {
-            var vin = client.ReadVin();
-            return System.Text.Encoding.ASCII.GetBytes(vin);
+            return client.ReadVin();
         });
     }
 
     private async void ReadDtc_Click(object sender, RoutedEventArgs e)
     {
-        await RunUdsOperationAsync("Read DTC", client => client.ReadDtcByStatusMask(0xFF));
+        await RunUdsOperationAsync("Read DTC", client => Hex(client.ReadDtcByStatusMask(0xFF)));
     }
+
+    private static string Hex(byte[] data) => BitConverter.ToString(data).Replace('-', ' ');
 
     private bool TryParseDid(out ushort did)
     {
@@ -135,7 +136,7 @@ public sealed partial class MainWindow : Window
 
     private async Task RunUdsOperationAsync(
         string operation,
-        Func<UdsClient, byte[]> action)
+        Func<UdsClient, string> action)
     {
         if (!await _udsGate.WaitAsync(0))
         {
@@ -150,6 +151,8 @@ public sealed partial class MainWindow : Window
                 SetStatus(error);
                 return;
             }
+
+            using var udsClient = client;
 
             SetUdsEnabled(false);
             SetStatus(operation + "...");
