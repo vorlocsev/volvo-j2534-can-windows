@@ -164,7 +164,7 @@ public sealed partial class MainWindow : Window
 
         var lines = new List<string> { "timestamp,id,type,dlc,data" };
         lines.AddRange(_frames.Select(frame =>
-            $"{frame.Timestamp},{frame.Id},{frame.Type},{frame.Dlc},"{frame.Data}""));
+            $"{frame.Timestamp},{frame.Id},{frame.Type},{frame.Dlc},\"{frame.Data}\""));
 
         await File.WriteAllLinesAsync(file.Path, lines);
         SetStatus("CSV saved: " + file.Path);
