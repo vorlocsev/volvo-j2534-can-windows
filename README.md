@@ -26,3 +26,37 @@ cmake --build build-x86 --config Release
 ```
 
 The application accepts the J2534 DLL path explicitly so it does not assume a proprietary installation layout.
+
+
+## GUI
+
+The Windows application now starts as a native Win32 GUI.
+
+Features:
+- J2534 DLL path with **Browse**
+- CAN bitrate: 500 / 250 / 125 kbit/s
+- Connect / Disconnect
+- Start / Stop CAN monitoring
+- live CAN frame table with timestamp, ID, DLC and data
+- hexadecimal CAN-ID filter
+- clear capture
+- CSV logging
+- status/error display
+
+### Important: DLL architecture
+
+The application architecture must match the J2534 DLL:
+- **x64 build** -> use a 64-bit J2534 DLL
+- **Win32 build** -> use a 32-bit J2534 DLL
+
+For older Volvo DiCE installations this can be important because legacy DiCE software may provide a 32-bit DLL.
+
+### Running
+
+After building, launch:
+
+`build\Release\volvo-j2534-can.exe`
+
+Select the vendor J2534 DLL with **Browse**, select the CAN bitrate, then press **Connect** and **Start**.
+
+The application does not bundle or install proprietary DiCE/Mongoose drivers.
