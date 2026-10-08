@@ -66,3 +66,8 @@ The process is x86, so it can load 32-bit J2534 DLLs but not 64-bit-only DLLs.
 5. ISO-TP transport.
 6. UDS diagnostic layer.
 7. Volvo ECU profiles.
+
+
+### ISO-TP
+
+The CAN layer now includes `IsoTp.cs` with Single/First/Consecutive/Flow Control parsing, segmentation and reassembly up to 4095 bytes.
