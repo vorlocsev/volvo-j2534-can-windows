@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
     private bool _connected;
     private int _total;
     private readonly Stopwatch _rate = new();
+    private readonly SemaphoreSlim _udsGate = new(1, 1);
     private int _rateFrames;
 
     public MainWindow()
@@ -32,17 +33,156 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         FramesView.ItemsSource = _frames;
         _session.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
-        Closed += (_, _) => { StopMonitor(); _session.Dispose(); };
+        Closed += (_, _) => { StopMonitor(); _udsGate.Dispose(); _session.Dispose(); };
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
+
+    private void SetUdsEnabled(bool enabled)
+    {
+        ReadDidButton.IsEnabled = enabled;
+        ReadVinButton.IsEnabled = enabled;
+        ReadDtcButton.IsEnabled = enabled;
+    }
+
+    private bool TryGetUdsClient(out UdsClient? client, out string error)
+    {
+        client = null;
+        error = string.Empty;
+
+        if (!_connected)
+        {
+            error = "Connect to J2534 first.";
+            return false;
+        }
+
+        if (!TryParseCanId(UdsRequestId.Text, out var requestId, out var requestError) ||
+            !TryParseCanId(UdsResponseId.Text, out var responseId, out requestError))
+        {
+            error = requestError;
+            return false;
+        }
+
+        try
+        {
+            var channel = new IsoTpChannel(
+                _session.Bus,
+                new IsoTpChannel.Options(requestId, responseId));
+
+            client = new UdsClient(channel);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static bool TryParseCanId(string text, out uint id, out string error)
+    {
+        error = string.Empty;
+        id = 0;
+
+        var value = text.Trim().Replace("0x", "", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(value) ||
+            !uint.TryParse(value, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out id) ||
+            id > 0x7FF)
+        {
+            error = "CAN ID must be a valid 11-bit hexadecimal value (000-7FF).";
+            return false;
+        }
+
+        return true;
+    }
+
+    private async void ReadDid_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryParseDid(out var did)) return;
+
+        await RunUdsOperationAsync("Read DID", client => client.ReadDataByIdentifier(did));
+    }
+
+    private async void ReadVin_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUdsOperationAsync("Read VIN", client =>
+        {
+            var vin = client.ReadVin();
+            return System.Text.Encoding.ASCII.GetBytes(vin);
+        });
+    }
+
+    private async void ReadDtc_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUdsOperationAsync("Read DTC", client => client.ReadDtcByStatusMask(0xFF));
+    }
+
+    private bool TryParseDid(out ushort did)
+    {
+        did = 0;
+        var value = UdsDid.Text.Trim().Replace("0x", "", StringComparison.OrdinalIgnoreCase);
+
+        if (!ushort.TryParse(value, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out did))
+        {
+            SetStatus("DID must be a valid 16-bit hexadecimal value.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task RunUdsOperationAsync(
+        string operation,
+        Func<UdsClient, byte[]> action)
+    {
+        if (!await _udsGate.WaitAsync(0))
+        {
+            SetStatus("Another UDS request is already running.");
+            return;
+        }
+
+        try
+        {
+            if (!TryGetUdsClient(out var client, out var error) || client is null)
+            {
+                SetStatus(error);
+                return;
+            }
+
+            SetUdsEnabled(false);
+            SetStatus(operation + "...");
+
+            var data = await Task.Run(() => action(client));
+            SetStatus(operation + ": " + BitConverter.ToString(data).Replace('-', ' '));
+        }
+        catch (UdsNegativeResponseException ex)
+        {
+            SetStatus(operation + " rejected: NRC 0x" + ex.NegativeResponseCode.ToString("X2"));
+        }
+        catch (TimeoutException ex)
+        {
+            SetStatus(operation + " timeout: " + ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetStatus(operation + " failed: " + ex.Message);
+        }
+        finally
+        {
+            SetUdsEnabled(_connected);
+            _udsGate.Release();
+        }
+    }
+
 
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
         if (_connected)
         {
             StopMonitor(); _session.Disconnect(); _connected = false;
-            ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetStatus("Disconnected");
+            ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetUdsEnabled(false); SetStatus("Disconnected");
             return;
         }
 
@@ -53,7 +193,7 @@ public sealed partial class MainWindow : Window
         { SetStatus("Connection failed: " + error); return; }
 
         _connected = true;
-        ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true;
+        ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true; SetUdsEnabled(true);
         SetStatus("Connected · J2534 · CAN");
         await Task.CompletedTask;
     }
