@@ -9,7 +9,7 @@ public sealed class UdsEcuDiscoveryTests
             0x7E8, 0x7E0, false, 4, 8);
 
         Assert.Equal((uint)0x7E8, candidate.ResponseId);
-        Assert.Equal((uint)0x7E0, candidate.RequestId);
+        Assert.Equal((uint?)0x7E0, candidate.RequestId);
         Assert.False(candidate.IsExtended);
         Assert.Equal(4, candidate.ResponseCount);
         Assert.Equal(8, candidate.MaxDataLength);
