@@ -39,7 +39,8 @@ internal sealed class CanRxDispatcher : IDisposable
                 return;
 
             _queue.Enqueue(frame);
-            _signal.Release();
+            try { _signal.Release(); }
+            catch (ObjectDisposedException) { _queue.TryDequeue(out _); }
         }
 
         public void Dispose()
