@@ -1,17 +1,25 @@
-using System.Collections.Concurrent;
-
 namespace VolvoJ2534.App;
 
 internal sealed class CanRxDispatcher : IDisposable
 {
     internal sealed class Subscription : IDisposable
     {
+        private const int DefaultQueueCapacity = 4096;
+
         private readonly CanRxDispatcher _owner;
-        private readonly ConcurrentQueue<CanFrame> _queue = new();
+        private readonly object _gate = new();
+        private readonly Queue<CanFrame> _queue = new();
         private readonly SemaphoreSlim _signal = new(0);
+        private readonly int _capacity;
         private int _disposed;
 
-        internal Subscription(CanRxDispatcher owner) => _owner = owner;
+        internal Subscription(CanRxDispatcher owner, int capacity = DefaultQueueCapacity)
+        {
+            _owner = owner;
+            if (capacity < 1)
+                throw new ArgumentOutOfRangeException(nameof(capacity));
+            _capacity = capacity;
+        }
 
         internal bool TryRead(TimeSpan timeout, CancellationToken cancellationToken, out CanFrame frame)
         {
@@ -19,17 +27,26 @@ internal sealed class CanRxDispatcher : IDisposable
             if (VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed))
                 return false;
 
-            while (true)
-            {
-                if (_queue.TryDequeue(out frame))
-                    return true;
+            if (timeout < TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(timeout));
 
+            try
+            {
                 if (!_signal.Wait(timeout, cancellationToken))
                     return false;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
 
-                timeout = TimeSpan.Zero;
-                if (_queue.TryDequeue(out frame))
-                    return true;
+            lock (_gate)
+            {
+                if (_queue.Count == 0)
+                    return false;
+
+                frame = _queue.Dequeue();
+                return true;
             }
         }
 
@@ -38,9 +55,30 @@ internal sealed class CanRxDispatcher : IDisposable
             if (VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed))
                 return;
 
-            _queue.Enqueue(frame);
-            try { _signal.Release(); }
-            catch (ObjectDisposedException) { _queue.TryDequeue(out _); }
+            lock (_gate)
+            {
+                if (VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed))
+                    return;
+
+                if (_queue.Count >= _capacity)
+                {
+                    // Drop the oldest frame under sustained bus load. Keep the
+                    // semaphore count aligned with the queue by consuming the
+                    // permit belonging to the dropped item.
+                    _queue.Dequeue();
+                    _signal.Wait(0);
+                }
+
+                _queue.Enqueue(frame);
+                try
+                {
+                    _signal.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    _queue.Dequeue();
+                }
+            }
         }
 
         public void Dispose()
@@ -49,6 +87,9 @@ internal sealed class CanRxDispatcher : IDisposable
                 return;
 
             _owner.Remove(this);
+            lock (_gate)
+                _queue.Clear();
+
             _signal.Dispose();
         }
     }
@@ -65,9 +106,12 @@ internal sealed class CanRxDispatcher : IDisposable
     internal CanRxDispatcher(J2534Native j2534)
         => _j2534 = j2534 ?? throw new ArgumentNullException(nameof(j2534));
 
-    internal Subscription Subscribe()
+    internal Subscription Subscribe(int capacity = 4096)
     {
-        var subscription = new Subscription(this);
+        if (capacity < 1)
+            throw new ArgumentOutOfRangeException(nameof(capacity));
+
+        var subscription = new Subscription(this, capacity);
         lock (_gate)
             _subscriptions.Add(subscription);
         return subscription;
