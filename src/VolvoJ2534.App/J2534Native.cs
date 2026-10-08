@@ -6,8 +6,8 @@ internal sealed unsafe class J2534Native : IDisposable
 {
     private const uint StatusNoError = 0;
     private const uint ErrTimeout = 0x00000009;
-    private const uint ProtocolCan = 5;
-    private const int MaxDataSize = 4128;
+    internal const uint ProtocolCan = 5;
+    internal const int MaxDataSize = 4128;
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     internal struct PassthruMsg
