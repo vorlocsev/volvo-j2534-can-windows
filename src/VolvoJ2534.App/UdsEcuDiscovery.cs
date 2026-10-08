@@ -99,7 +99,7 @@ internal sealed class UdsEcuDiscovery
         return false;
     }
 
-    private static uint? GuessRequestId(uint responseId, bool extended)
+    internal static uint? GuessRequestId(uint responseId, bool extended)
     {
         if (!extended && responseId is >= 0x7E8 and <= 0x7EF)
             return responseId - 8;
