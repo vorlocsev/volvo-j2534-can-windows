@@ -6,6 +6,8 @@ internal enum UdsService : byte
     ReadDtcInformation = 0x19
 }
 
+internal sealed record UdsDtcRecord(uint Code, byte Status);
+
 internal sealed class UdsNegativeResponseException : Exception
 {
     internal byte RequestedService { get; }
@@ -37,14 +39,40 @@ internal sealed class UdsClient : IDisposable
         return Request((byte)UdsService.ReadDataByIdentifier, parameters, cancellationToken);
     }
 
-    internal byte[] ReadDtcByStatusMask(
+    internal IReadOnlyList<UdsDtcRecord> ReadDtcByStatusMask(
         byte statusMask = 0xFF,
         CancellationToken cancellationToken = default)
     {
         Span<byte> parameters = stackalloc byte[2];
         parameters[0] = 0x02; // reportDTCByStatusMask
         parameters[1] = statusMask;
-        return Request((byte)UdsService.ReadDtcInformation, parameters, cancellationToken);
+
+        var response = Request((byte)UdsService.ReadDtcInformation, parameters, cancellationToken);
+        if (response.Length < 2)
+            throw new InvalidOperationException("Malformed UDS DTC response.");
+
+        // After the positive SID, the payload starts with subfunction and
+        // DTC status availability mask. Request() already removed the SID.
+        if (response[0] != 0x02)
+            throw new InvalidOperationException(
+                $"Unexpected DTC subfunction 0x{response[0]:X2}; expected 0x02.");
+
+        var records = new List<UdsDtcRecord>();
+        var offset = 2;
+
+        if ((response.Length - offset) % 4 != 0)
+            throw new InvalidOperationException("Malformed UDS DTC record length.");
+
+        while (offset < response.Length)
+        {
+            var code = (uint)(response[offset] << 16 |
+                              response[offset + 1] << 8 |
+                              response[offset + 2]);
+            records.Add(new UdsDtcRecord(code, response[offset + 3]));
+            offset += 4;
+        }
+
+        return records;
     }
 
     internal string ReadVin(CancellationToken cancellationToken = default)
