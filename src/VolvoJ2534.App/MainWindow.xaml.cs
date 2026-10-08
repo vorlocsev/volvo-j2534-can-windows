@@ -31,7 +31,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         FramesView.ItemsSource = _frames;
-        _session.Bus.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
+        _session.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
         Closed += (_, _) => { StopMonitor(); _session.Dispose(); };
     }
 
