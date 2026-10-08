@@ -112,3 +112,16 @@ The channel is transport-only. It does not implement UDS security access, PIN ex
 The CAN monitor and `IsoTpChannel` therefore no longer compete for the same J2534 receive queue. An ISO-TP transaction can consume only its own subscribed frames while the monitor receives the same traffic independently.
 
 The dispatcher must be started after `PassThruConnect` and stopped before the J2534 channel is disconnected.
+### J2534Session / CanBus
+
+`J2534Session` owns the J2534 device lifecycle. After connection it creates a `CanBus`.
+
+`CanBus` owns:
+
+- `J2534Native` access;
+- the single `CanRxDispatcher` reader;
+- a serialized CAN TX lock;
+- subscriptions used by the CAN monitor and ISO-TP;
+- the CAN send abstraction used by future UDS code.
+
+`MainWindow`, `IsoTpChannel` and future `UdsClient` code should use `J2534Session.Bus`/`CanBus` rather than calling `J2534Native.Read` or `J2534Native.Write` directly.
