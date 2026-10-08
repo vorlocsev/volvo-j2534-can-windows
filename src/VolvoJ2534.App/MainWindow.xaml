@@ -41,7 +41,7 @@
             <Grid Grid.Row="0" ColumnSpacing="10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Button x:Name="DiscoverButton" Content="Discover ECUs" Click="Discover_Click" IsEnabled="False"/>
-                <ComboBox x:Name="EcuSelector" Grid.Column="1" PlaceholderText="Select ECU"/>
+                <ComboBox x:Name="EcuSelector" Grid.Column="1" PlaceholderText="Select ECU" SelectionChanged="EcuSelector_SelectionChanged"/>
                 <TextBlock x:Name="DiscoveryStatus" Grid.Column="2" VerticalAlignment="Center" Text="Not scanned"/>
             </Grid>
             <ListView x:Name="EcusView" Grid.Row="1" Height="100" SelectionMode="Single" SelectionChanged="Ecu_SelectionChanged">
@@ -49,7 +49,13 @@
                 <ListView.ItemTemplate><DataTemplate><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="100"/><ColumnDefinition Width="90"/><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Response}"/><TextBlock Grid.Column="1" Text="{Binding Request}"/><TextBlock Grid.Column="2" Text="{Binding Type}"/><TextBlock Grid.Column="3" Text="{Binding Frames}"/><TextBlock Grid.Column="4" Text="{Binding MaxPayload}"/></Grid></DataTemplate.ItemTemplate>
             </ListView>
             </ListView>
-            <Grid Grid.Row="2">
+            <Border Grid.Row="2" Padding="10" Margin="0,10,0,0" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Selected ECU" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="EcuInfoText" Text="No ECU selected" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+            <Grid Grid.Row="2" Margin="0,80,0,0">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid ColumnSpacing="10" Margin="0,0,0,10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="120"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
