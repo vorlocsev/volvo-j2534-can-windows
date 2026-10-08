@@ -93,6 +93,7 @@ Example configuration:
 ```csharp
 var channel = new IsoTpChannel(
     j2534,
+    rxDispatcher,
     new IsoTpChannel.Options(
         RequestId: 0x7E0,
         ResponseId: 0x7E8,
