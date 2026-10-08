@@ -111,9 +111,12 @@ internal sealed unsafe class J2534Native : IDisposable
         }
 
         uint count = 1;
-        var result = _read(_channel, &msg, ref count, timeout);
-        if (result == StatusNoError && count == 1) return true;
-        if (result == ErrTimeout) return false;
+        fixed (PassthruMsg* pMsg = &msg)
+        {
+            var result = _read(_channel, pMsg, ref count, timeout);
+            if (result == StatusNoError && count == 1) return true;
+            if (result == ErrTimeout) return false;
+        }
 
         error = LastError();
         return false;
