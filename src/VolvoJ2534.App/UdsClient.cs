@@ -57,7 +57,7 @@ internal sealed class UdsClient : IDisposable
         return System.Text.Encoding.ASCII.GetString(data).Trim('\0', ' ', '\r', '\n');
     }
 
-    internal void Dispose()
+    public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
             _channel.Dispose();
