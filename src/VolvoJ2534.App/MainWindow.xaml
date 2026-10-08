@@ -1,0 +1,40 @@
+<Window
+    x:Class="VolvoJ2534.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Grid Padding="20" RowSpacing="14">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Spacing="4">
+            <TextBlock Text="Volvo J2534 CAN Monitor" FontSize="28" FontWeight="SemiBold"/>
+            <TextBlock Text="Windows 11 · WinUI 3 · x86 only · read-only diagnostics" Opacity="0.65"/>
+        </StackPanel>
+        <Grid Grid.Row="1" ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
+            <TextBox x:Name="DllPath" PlaceholderText="Path to 32-bit J2534 DLL" Header="J2534 DLL"/>
+            <ComboBox x:Name="BaudRate" Grid.Column="1" Header="CAN speed" SelectedIndex="0">
+                <ComboBoxItem Content="500 kbit/s" Tag="500000"/><ComboBoxItem Content="250 kbit/s" Tag="250000"/><ComboBoxItem Content="125 kbit/s" Tag="125000"/>
+            </ComboBox>
+            <Button x:Name="ConnectButton" Grid.Column="2" Content="Connect" Click="Connect_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="StartButton" Grid.Column="3" Content="Start monitor" Click="Start_Click" VerticalAlignment="Bottom" IsEnabled="False"/>
+        </Grid>
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid ColumnSpacing="10" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="120"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
+                <TextBox x:Name="IdFilter" Header="ID filter (hex)" PlaceholderText="e.g. 7E8" TextChanged="Filter_Changed"/>
+                <Button Grid.Column="1" Content="Clear" Click="Clear_Click" VerticalAlignment="Bottom"/>
+                <Button Grid.Column="2" Content="CSV log" Click="Csv_Click" VerticalAlignment="Bottom"/>
+                <TextBlock x:Name="FrameRateText" Grid.Column="3" VerticalAlignment="Center" Text="0 frames/s"/>
+                <TextBlock x:Name="FrameCountText" Grid.Column="4" VerticalAlignment="Center" Text="0 frames" HorizontalAlignment="Right"/>
+            </Grid>
+            <ListView x:Name="FramesView" Grid.Row="1" SelectionMode="None">
+                <ListView.Header><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Timestamp (ms)"/><TextBlock Grid.Column="1" Text="ID"/><TextBlock Grid.Column="2" Text="DLC"/><TextBlock Grid.Column="3" Text="Data"/></Grid></ListView.Header>
+                <ListView.ItemTemplate><DataTemplate><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Timestamp}"/><TextBlock Grid.Column="1" Text="{Binding Id}" FontFamily="Consolas"/><TextBlock Grid.Column="2" Text="{Binding Dlc}"/><TextBlock Grid.Column="3" Text="{Binding Data}" FontFamily="Consolas"/></Grid></DataTemplate></ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+        <Border Grid.Row="3" Padding="10" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><TextBlock x:Name="StatusText" Text="Disconnected"/></Border>
+    </Grid>
+</Window>
