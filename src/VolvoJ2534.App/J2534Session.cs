@@ -41,6 +41,8 @@ internal sealed class J2534Session : IDisposable
         }
         catch (Exception ex)
         {
+            _bus?.Dispose();
+            _bus = null;
             _j2534.Unload();
             error = ex.Message;
             return false;
