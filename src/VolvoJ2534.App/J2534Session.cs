@@ -5,6 +5,8 @@ internal sealed class J2534Session : IDisposable
     private readonly J2534Native _j2534 = new();
     private CanBus? _bus;
 
+    internal event Action<Exception>? ReadError;
+
     internal bool IsConnected => _bus is not null;
 
     internal CanBus Bus =>
@@ -33,6 +35,7 @@ internal sealed class J2534Session : IDisposable
         try
         {
             _bus = new CanBus(_j2534);
+            _bus.ReadError += HandleReadError;
             _bus.Start();
             return true;
         }
@@ -46,10 +49,16 @@ internal sealed class J2534Session : IDisposable
 
     internal void Disconnect()
     {
-        _bus?.Dispose();
-        _bus = null;
+        if (_bus is not null)
+        {
+            _bus.ReadError -= HandleReadError;
+            _bus.Dispose();
+            _bus = null;
+        }
         _j2534.Unload();
     }
+
+    private void HandleReadError(Exception error) => ReadError?.Invoke(error);
 
     public void Dispose()
     {
