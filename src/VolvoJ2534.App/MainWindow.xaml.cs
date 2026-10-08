@@ -129,7 +129,7 @@ public sealed partial class MainWindow : Window
             EcuSelector.SelectedIndex = index;
 
         EcuInfoText.Text =
-            $"Request: {(row.Candidate.RequestId is uint ? $"0x{row.Candidate.RequestId.Value:X}" : "unknown")}  ·  "
+            $"Request: {(row.Candidate.RequestId is uint ? $"0x{row.Candidate.RequestId.Value:X}" : "unknown")}  ·  " +
             $"Response: 0x{row.Candidate.ResponseId:X}  ·  " +
             $"Type: {(row.Candidate.IsExtended ? "29-bit" : "11-bit")}  ·  " +
             $"Observed frames: {row.Candidate.ResponseCount}  ·  " +
