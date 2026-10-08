@@ -6,11 +6,13 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
     <Grid Padding="20" RowSpacing="14">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
         <StackPanel Spacing="4">
             <TextBlock Text="Volvo J2534 CAN Monitor" FontSize="28" FontWeight="SemiBold"/>
             <TextBlock Text="Windows 11 · WinUI 3 · x86 only · read-only diagnostics" Opacity="0.65"/>
         </StackPanel>
+
         <Grid Grid.Row="1" ColumnSpacing="10">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
             <TextBox x:Name="DllPath" PlaceholderText="Path to 32-bit J2534 DLL" Header="J2534 DLL"/>
@@ -20,7 +22,21 @@
             <Button x:Name="ConnectButton" Grid.Column="2" Content="Connect" Click="Connect_Click" VerticalAlignment="Bottom"/>
             <Button x:Name="StartButton" Grid.Column="3" Content="Start monitor" Click="Start_Click" VerticalAlignment="Bottom" IsEnabled="False"/>
         </Grid>
-        <Grid Grid.Row="2">
+
+        <Grid Grid.Row="2" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120"/><ColumnDefinition Width="120"/><ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="120"/><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="UdsRequestId" Header="UDS request ID" Text="7E0" PlaceholderText="e.g. 7E0"/>
+            <TextBox x:Name="UdsResponseId" Grid.Column="1" Header="UDS response ID" Text="7E8" PlaceholderText="e.g. 7E8"/>
+            <TextBox x:Name="UdsDid" Grid.Column="2" Header="DID (hex)" Text="F190" PlaceholderText="e.g. F190"/>
+            <Button Grid.Column="3" Content="Read DID" Click="ReadDid_Click" VerticalAlignment="Bottom" IsEnabled="{Binding ElementName=ConnectButton, Path=Content}"/>
+            <Button Grid.Column="4" Content="Read VIN" Click="ReadVin_Click" VerticalAlignment="Bottom"/>
+            <Button Grid.Column="5" Content="Read DTC (status FF)" Click="ReadDtc_Click" VerticalAlignment="Bottom"/>
+        </Grid>
+
+        <Grid Grid.Row="3">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid ColumnSpacing="10" Margin="0,0,0,10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="120"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
@@ -35,6 +51,9 @@
                 <ListView.ItemTemplate><DataTemplate><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="80"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Timestamp}"/><TextBlock Grid.Column="1" Text="{Binding Id}" FontFamily="Consolas"/><TextBlock Grid.Column="2" Text="{Binding Type}"/><TextBlock Grid.Column="3" Text="{Binding Dlc}"/><TextBlock Grid.Column="4" Text="{Binding Data}" FontFamily="Consolas"/></Grid></DataTemplate></ListView.ItemTemplate>
             </ListView>
         </Grid>
-        <Border Grid.Row="3" Padding="10" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><TextBlock x:Name="StatusText" Text="Disconnected"/></Border>
+
+        <Border Grid.Row="4" Padding="10" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <TextBlock x:Name="StatusText" Text="Disconnected"/>
+        </Border>
     </Grid>
 </Window>
