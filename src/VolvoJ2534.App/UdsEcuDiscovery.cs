@@ -2,7 +2,7 @@ namespace VolvoJ2534.App;
 
 internal sealed record UdsEcuCandidate(
     uint ResponseId,
-    uint RequestId,
+    uint? RequestId,
     bool IsExtended,
     int ResponseCount,
     int? MaxDataLength);
@@ -27,6 +27,8 @@ internal sealed class UdsEcuDiscovery
 
         while (DateTime.UtcNow < end)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var remaining = end - DateTime.UtcNow;
             if (remaining <= TimeSpan.Zero)
                 break;
@@ -37,9 +39,8 @@ internal sealed class UdsEcuDiscovery
                     out var frame))
                 continue;
 
-            // Passive discovery only: do not transmit probe frames.
-            // Standard UDS physical response IDs are commonly 0x7E8..0x7EF.
-            if (!IsLikelyUdsResponse(frame))
+            // Passive only: no probe or diagnostic request is transmitted.
+            if (!IsLikelyUdsResponse(frame, out _))
                 continue;
 
             var key = (frame.ArbitrationId, frame.IsExtended);
@@ -64,21 +65,57 @@ internal sealed class UdsEcuDiscovery
             .ToArray());
     }
 
-    private static bool IsLikelyUdsResponse(CanFrame frame)
+    internal static bool IsLikelyUdsResponse(CanFrame frame, out byte? responseService)
     {
+        responseService = null;
+
         if (frame.IsRemote || frame.Data.Length == 0)
             return false;
 
-        if (!frame.IsExtended)
-            return frame.ArbitrationId is >= 0x7E8 and <= 0x7EF;
+        if (!IsoTp.TryDecode(frame, out var iso, out _))
+            return false;
+
+        if (iso.Data.Length == 0)
+            return false;
+
+        var sid = iso.Data[0];
+
+        // UDS negative response.
+        if (sid == 0x7F)
+        {
+            responseService = sid;
+            return true;
+        }
+
+        // Positive response SID = request SID + 0x40.
+        // Current read-only client uses the standard 0x10..0x3E/0x22/0x19
+        // service range, whose positive SIDs are in 0x50..0x7E.
+        if (sid is >= 0x41 and <= 0x7E)
+        {
+            responseService = sid;
+            return true;
+        }
 
         return false;
     }
 
-    private static uint GuessRequestId(uint responseId, bool extended)
-        => !extended && responseId is >= 0x7E8 and <= 0x7EF
-            ? responseId - 8
-            : responseId;
+    private static uint? GuessRequestId(uint responseId, bool extended)
+    {
+        if (!extended && responseId is >= 0x7E8 and <= 0x7EF)
+            return responseId - 8;
+
+        // ISO 15765-4 fixed-normal 29-bit physical response:
+        //   response 0x18DAF1xx -> request 0x18DAxxF1.
+        // Do not invent a request ID for other 29-bit schemes.
+        if (extended &&
+            (responseId & 0x1FFFFF00) == 0x18DAF100)
+        {
+            var ecuAddress = responseId & 0xFF;
+            return 0x18DA0000u | (ecuAddress << 8) | 0xF1;
+        }
+
+        return null;
+    }
 
     private sealed class Observation
     {
