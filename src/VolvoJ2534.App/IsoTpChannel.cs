@@ -29,15 +29,15 @@ internal sealed class IsoTpChannel : IDisposable
             RequestTimeout == default ? TimeSpan.FromSeconds(5) : RequestTimeout;
     }
 
-    private readonly J2534Native _j2534;
+    private readonly CanBus _bus;
     private readonly CanRxDispatcher.Subscription _rx;
     private readonly Options _options;
 
-    internal IsoTpChannel(J2534Native j2534, CanRxDispatcher dispatcher, Options options)
+    internal IsoTpChannel(CanBus bus, Options options)
     {
-        _j2534 = j2534 ?? throw new ArgumentNullException(nameof(j2534));
+        _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _rx = (dispatcher ?? throw new ArgumentNullException(nameof(dispatcher))).Subscribe();
+        _rx = _bus.Subscribe();
 
         ValidateId(_options.RequestId, _options.ExtendedAddressing, nameof(options.RequestId));
         ValidateId(_options.ResponseId, _options.ExtendedAddressing, nameof(options.ResponseId));
@@ -249,19 +249,22 @@ internal sealed class IsoTpChannel : IDisposable
         if (data.Length > 8)
             throw new ArgumentOutOfRangeException(nameof(data), "Classic CAN payload cannot exceed 8 bytes.");
 
-        if (Remaining(deadline) <= TimeSpan.Zero)
+        var remaining = Remaining(deadline);
+        if (remaining <= TimeSpan.Zero)
             throw new TimeoutException("ISO-TP request timeout expired.");
 
-        var message = CanDecoder.Encode(id, data, _options.ExtendedAddressing);
-        var timeout = (uint)Math.Clamp(
-            (long)Math.Ceiling(Remaining(deadline).TotalMilliseconds),
-            1,
-            uint.MaxValue);
-
-        if (!_j2534.Write(message, timeout, out var error))
+        if (!_bus.Send(
+                id,
+                data,
+                _options.ExtendedAddressing,
+                remaining,
+                cancellationToken,
+                out var error))
+        {
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
                 ? "J2534 CAN write failed."
                 : error);
+        }
     }
 
     private static void WaitSeparation(byte separationTime, long deadline, CancellationToken cancellationToken)
