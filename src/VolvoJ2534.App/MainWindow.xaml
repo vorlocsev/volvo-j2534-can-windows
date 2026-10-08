@@ -68,6 +68,7 @@
                 <ListView.Header><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="80"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Timestamp (ms)"/><TextBlock Grid.Column="1" Text="ID"/><TextBlock Grid.Column="2" Text="Type"/><TextBlock Grid.Column="3" Text="DLC"/><TextBlock Grid.Column="4" Text="Data"/></Grid></ListView.Header>
                 <ListView.ItemTemplate><DataTemplate><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="80"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Timestamp}"/><TextBlock Grid.Column="1" Text="{Binding Id}" FontFamily="Consolas"/><TextBlock Grid.Column="2" Text="{Binding Type}"/><TextBlock Grid.Column="3" Text="{Binding Dlc}"/><TextBlock Grid.Column="4" Text="{Binding Data}" FontFamily="Consolas"/></Grid></DataTemplate></ListView.ItemTemplate>
             </ListView>
+            </Grid>
         </Grid>
 
         <Border Grid.Row="4" Padding="10" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
