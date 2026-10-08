@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolvoJ2534.App", "src\VolvoJ2534.App\VolvoJ2534.App.csproj", "{6D8B5E8C-6D1A-4F5C-AF4A-3B2A7E4E1D01}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VolvoJ2534.App.Tests", "tests\VolvoJ2534.App.Tests\VolvoJ2534.App.Tests.csproj", "{A1C9E4F2-5D72-4C6A-9F01-7B3E8D2C6A44}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
@@ -14,5 +16,9 @@ Global
 		{6D8B5E8C-6D1A-4F5C-AF4A-3B2A7E4E1D01}.Debug|x86.Build.0 = Debug|x86
 		{6D8B5E8C-6D1A-4F5C-AF4A-3B2A7E4E1D01}.Release|x86.ActiveCfg = Release|x86
 		{6D8B5E8C-6D1A-4F5C-AF4A-3B2A7E4E1D01}.Release|x86.Build.0 = Release|x86
+		{A1C9E4F2-5D72-4C6A-9F01-7B3E8D2C6A44}.Debug|x86.ActiveCfg = Debug|x86
+		{A1C9E4F2-5D72-4C6A-9F01-7B3E8D2C6A44}.Debug|x86.Build.0 = Debug|x86
+		{A1C9E4F2-5D72-4C6A-9F01-7B3E8D2C6A44}.Release|x86.ActiveCfg = Release|x86
+		{A1C9E4F2-5D72-4C6A-9F01-7B3E8D2C6A44}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 EndGlobal
