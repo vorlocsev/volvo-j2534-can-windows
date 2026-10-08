@@ -74,6 +74,12 @@ public sealed partial class MainWindow : Window
                 EcuSelector.Items.Add($"{row.Request} → {row.Response}");
             }
 
+            if (found.Count > 0)
+            {
+                EcusView.SelectedIndex = 0;
+                EcuSelector.SelectedIndex = 0;
+            }
+
             DiscoveryStatus.Text = found.Count == 0
                 ? "No standard UDS responses"
                 : $"{found.Count} ECU(s) found";
@@ -100,10 +106,33 @@ public sealed partial class MainWindow : Window
         if (EcusView.SelectedItem is not EcuRow row)
             return;
 
+        ApplyEcuSelection(row, EcusView.SelectedIndex);
+    }
+
+    private void EcuSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var index = EcuSelector.SelectedIndex;
+        if (index < 0 || index >= _ecus.Count)
+            return;
+
+        EcusView.SelectedIndex = index;
+        ApplyEcuSelection(_ecus[index], index);
+    }
+
+    private void ApplyEcuSelection(EcuRow row, int index)
+    {
         UdsRequestId.Text = row.Candidate.RequestId.ToString("X3");
         UdsResponseId.Text = row.Candidate.ResponseId.ToString("X3");
-        if (EcuSelector.SelectedIndex >= 0)
-            EcuSelector.SelectedIndex = EcusView.SelectedIndex;
+
+        if (EcuSelector.SelectedIndex != index)
+            EcuSelector.SelectedIndex = index;
+
+        EcuInfoText.Text =
+            $"Request: 0x{row.Candidate.RequestId:X3}  ·  " +
+            $"Response: 0x{row.Candidate.ResponseId:X3}  ·  " +
+            $"Type: {(row.Candidate.IsExtended ? "29-bit" : "11-bit")}  ·  " +
+            $"Observed frames: {row.Candidate.ResponseCount}  ·  " +
+            $"Max payload: {row.Candidate.MaxDataLength?.ToString() ?? "-"} bytes";
     }
 
     private void SetUdsEnabled(bool enabled)
