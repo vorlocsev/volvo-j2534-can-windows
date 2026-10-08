@@ -114,7 +114,13 @@ public sealed partial class MainWindow : Window
 
     private async void ReadDtc_Click(object sender, RoutedEventArgs e)
     {
-        await RunUdsOperationAsync("Read DTC", client => Hex(client.ReadDtcByStatusMask(0xFF)));
+        await RunUdsOperationAsync("Read DTC", client =>
+{
+    var dtcs = client.ReadDtcByStatusMask(0xFF);
+    return dtcs.Count == 0
+        ? "No DTCs"
+        : string.Join(", ", dtcs.Select(d => $"0x{d.Code:X6}/status=0x{d.Status:X2}"));
+});
     }
 
     private static string Hex(byte[] data) => BitConverter.ToString(data).Replace('-', ' ');
