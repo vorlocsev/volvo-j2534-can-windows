@@ -30,12 +30,14 @@ internal sealed class IsoTpChannel
     }
 
     private readonly J2534Native _j2534;
+    private readonly CanRxDispatcher.Subscription _rx;
     private readonly Options _options;
 
-    internal IsoTpChannel(J2534Native j2534, Options options)
+    internal IsoTpChannel(J2534Native j2534, CanRxDispatcher dispatcher, Options options)
     {
         _j2534 = j2534 ?? throw new ArgumentNullException(nameof(j2534));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _rx = (dispatcher ?? throw new ArgumentNullException(nameof(dispatcher))).Subscribe();
 
         ValidateId(_options.RequestId, _options.ExtendedAddressing, nameof(options.RequestId));
         ValidateId(_options.ResponseId, _options.ExtendedAddressing, nameof(options.ResponseId));
@@ -224,20 +226,8 @@ internal sealed class IsoTpChannel
             if (remaining <= TimeSpan.Zero)
                 throw new TimeoutException("ISO-TP receive timeout expired.");
 
-            var readTimeout = (uint)Math.Clamp(
-                (long)Math.Ceiling(remaining.TotalMilliseconds),
-                1,
-                uint.MaxValue);
-
-            if (!_j2534.Read(out var message, readTimeout, out var error))
-            {
-                if (!string.IsNullOrWhiteSpace(error))
-                    throw new InvalidOperationException(error);
-                continue;
-            }
-
-            if (!CanDecoder.TryDecode(message, out var frame, out error))
-                continue;
+            if (!_rx.TryRead(remaining, cancellationToken, out var frame))
+                throw new TimeoutException("ISO-TP receive timeout expired.");
 
             if (frame.ArbitrationId != expectedId ||
                 frame.IsExtended != _options.ExtendedAddressing ||
@@ -347,3 +337,5 @@ internal sealed class IsoTpChannel
     private static long ToTimestampTicks(TimeSpan value)
         => checked((long)(value.TotalSeconds * Stopwatch.Frequency));
 }
+
+    public void Dispose() => _rx.Dispose();
