@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 using System.Collections.ObjectModel;
@@ -11,7 +12,7 @@ public sealed partial class MainWindow : Window
     private sealed class Frame { public uint Timestamp {get;init;} public string Id {get;init;}=""; public uint Dlc {get;init;} public string Data {get;init;}=""; }
     private readonly ObservableCollection<Frame> _frames=new();
     private readonly J2534Native _j=new(); private CancellationTokenSource? _cts; private bool _connected; private int _total; private readonly Stopwatch _rate=new(); private int _rateFrames;
-    public MainWindow(){InitializeComponent();FramesView.ItemsSource=_frames;Title="Volvo J2534 CAN Monitor";}
+    public MainWindow(){InitializeComponent();FramesView.ItemsSource=_frames;}
     private void SetStatus(string s)=>StatusText.Text=s;
     private async void Connect_Click(object sender,RoutedEventArgs e){if(_connected){StopMonitor();_j.Unload();_connected=false;ConnectButton.Content="Connect";StartButton.IsEnabled=false;SetStatus("Disconnected");return;}if(string.IsNullOrWhiteSpace(DllPath.Text)){SetStatus("Select a 32-bit J2534 DLL.");return;}if(!_j.Load(DllPath.Text.Trim(),out var err)||!_j.Open(out err)){SetStatus("Connection failed: "+err);return;}uint baud=uint.Parse(((ComboBoxItem)BaudRate.SelectedItem).Tag.ToString()!);if(!_j.Connect(baud,out err)){_j.Unload();SetStatus("CAN connect failed: "+err);return;}_connected=true;ConnectButton.Content="Disconnect";StartButton.IsEnabled=true;SetStatus("Connected · J2534 · x86");await Task.CompletedTask;}
     private void Start_Click(object sender,RoutedEventArgs e){if(_cts==null)StartMonitor();else StopMonitor();}
