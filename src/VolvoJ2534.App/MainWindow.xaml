@@ -31,9 +31,9 @@
             <TextBox x:Name="UdsRequestId" Header="UDS request ID" Text="7E0" PlaceholderText="e.g. 7E0"/>
             <TextBox x:Name="UdsResponseId" Grid.Column="1" Header="UDS response ID" Text="7E8" PlaceholderText="e.g. 7E8"/>
             <TextBox x:Name="UdsDid" Grid.Column="2" Header="DID (hex)" Text="F190" PlaceholderText="e.g. F190"/>
-            <Button Grid.Column="3" Content="Read DID" Click="ReadDid_Click" VerticalAlignment="Bottom" IsEnabled="{Binding ElementName=ConnectButton, Path=Content}"/>
-            <Button Grid.Column="4" Content="Read VIN" Click="ReadVin_Click" VerticalAlignment="Bottom"/>
-            <Button Grid.Column="5" Content="Read DTC (status FF)" Click="ReadDtc_Click" VerticalAlignment="Bottom"/>
+            <Button Grid.Column="3" Content="Read DID" Click="ReadDid_Click" VerticalAlignment="Bottom" x:Name="ReadDidButton" IsEnabled="False"/>
+            <Button x:Name="ReadVinButton" Grid.Column="4" Content="Read VIN" IsEnabled="False" Click="ReadVin_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="ReadDtcButton" Grid.Column="5" Content="Read DTC (status FF)" IsEnabled="False" Click="ReadDtc_Click" VerticalAlignment="Bottom"/>
         </Grid>
 
         <Grid Grid.Row="3">
