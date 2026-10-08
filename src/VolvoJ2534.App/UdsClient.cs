@@ -19,9 +19,10 @@ internal sealed class UdsNegativeResponseException : Exception
     }
 }
 
-internal sealed class UdsClient
+internal sealed class UdsClient : IDisposable
 {
     private readonly IsoTpChannel _channel;
+    private int _disposed;
 
     internal UdsClient(IsoTpChannel channel)
         => _channel = channel ?? throw new ArgumentNullException(nameof(channel));
@@ -52,11 +53,20 @@ internal sealed class UdsClient
         return System.Text.Encoding.ASCII.GetString(data).Trim('\0', ' ', '\r', '\n');
     }
 
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            _channel.Dispose();
+    }
+
     private byte[] Request(
         byte service,
         ReadOnlySpan<byte> parameters,
         CancellationToken cancellationToken)
     {
+        if (Volatile.Read(ref _disposed) != 0)
+            throw new ObjectDisposedException(nameof(UdsClient));
+
         var request = new byte[1 + parameters.Length];
         request[0] = service;
         parameters.CopyTo(request.AsSpan(1));
