@@ -1,0 +1,12 @@
+build/
+build-*/
+.vs/
+.vscode/
+*.user
+*.suo
+*.vcxproj
+*.vcxproj.filters
+*.pdb
+*.obj
+*.dll
+*.exe
