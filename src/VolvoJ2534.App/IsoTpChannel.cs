@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace VolvoJ2534.App;
 
-internal sealed class IsoTpChannel
+internal sealed class IsoTpChannel : IDisposable
 {
     internal sealed record Options(
         uint RequestId,
@@ -336,6 +336,5 @@ internal sealed class IsoTpChannel
 
     private static long ToTimestampTicks(TimeSpan value)
         => checked((long)(value.TotalSeconds * Stopwatch.Frequency));
-}
-
     public void Dispose() => _rx.Dispose();
+}
