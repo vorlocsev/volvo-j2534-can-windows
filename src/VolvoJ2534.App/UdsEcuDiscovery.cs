@@ -14,7 +14,7 @@ internal sealed class UdsEcuDiscovery
     internal UdsEcuDiscovery(CanBus bus)
         => _bus = bus ?? throw new ArgumentNullException(nameof(bus));
 
-    internal async Task<IReadOnlyList<UdsEcuCandidate>> ScanAsync(
+    internal Task<IReadOnlyList<UdsEcuCandidate>> ScanAsync(
         TimeSpan duration,
         CancellationToken cancellationToken = default)
     {
@@ -53,7 +53,7 @@ internal sealed class UdsEcuDiscovery
             observation.MaxLength = Math.Max(observation.MaxLength, frame.Data.Length);
         }
 
-        return observations.Values
+        return Task.FromResult<IReadOnlyList<UdsEcuCandidate>>(observations.Values
             .OrderByDescending(x => x.Count)
             .Select(x => new UdsEcuCandidate(
                 x.Id,
@@ -61,7 +61,7 @@ internal sealed class UdsEcuDiscovery
                 x.IsExtended,
                 x.Count,
                 x.MaxLength))
-            .ToArray();
+            .ToArray());
     }
 
     private static bool IsLikelyUdsResponse(CanFrame frame)
