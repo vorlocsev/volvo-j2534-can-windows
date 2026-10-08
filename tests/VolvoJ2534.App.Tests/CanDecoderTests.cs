@@ -1,6 +1,6 @@
 namespace VolvoJ2534.App.Tests;
 
-public sealed class CanDecoderTests
+public sealed unsafe class CanDecoderTests
 {
     [Fact]
     public void EncodeDecode_StandardCanId()
