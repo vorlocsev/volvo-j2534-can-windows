@@ -19,8 +19,7 @@ public sealed partial class MainWindow : Window
     }
 
     private readonly ObservableCollection<Frame> _frames = new();
-    private readonly J2534Native _j = new();
-    private readonly CanRxDispatcher _rxDispatcher;
+    private readonly J2534Session _session = new();
     private CancellationTokenSource? _cts;
     private Task? _monitorTask;
     private bool _connected;
@@ -32,9 +31,8 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         FramesView.ItemsSource = _frames;
-        _rxDispatcher = new CanRxDispatcher(_j);
-        _rxDispatcher.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
-        Closed += (_, _) => { StopMonitor(); _rxDispatcher.Dispose(); _j.Dispose(); };
+        _session.Bus.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
+        Closed += (_, _) => { StopMonitor(); _session.Dispose(); };
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
@@ -43,22 +41,18 @@ public sealed partial class MainWindow : Window
     {
         if (_connected)
         {
-            StopMonitor(); _rxDispatcher.Stop(); _j.Unload(); _connected = false;
+            StopMonitor(); _session.Disconnect(); _connected = false;
             ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetStatus("Disconnected");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(DllPath.Text)) { SetStatus("Select a J2534 DLL."); return; }
 
-        if (!_j.Load(DllPath.Text.Trim(), out var error) || !_j.Open(out error))
+        var baud = uint.Parse(((ComboBoxItem)BaudRate.SelectedItem).Tag.ToString()!);
+        if (!_session.Connect(DllPath.Text.Trim(), baud, out var error))
         { SetStatus("Connection failed: " + error); return; }
 
-        var baud = uint.Parse(((ComboBoxItem)BaudRate.SelectedItem).Tag.ToString()!);
-        if (!_j.Connect(baud, out error))
-        { _j.Unload(); SetStatus("CAN connect failed: " + error); return; }
-
         _connected = true;
-        _rxDispatcher.Start();
         ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true;
         SetStatus("Connected · J2534 · CAN");
         await Task.CompletedTask;
@@ -73,7 +67,7 @@ public sealed partial class MainWindow : Window
 
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
-        var subscription = _rxDispatcher.Subscribe();
+        var subscription = _session.Bus.Subscribe();
 
         StartButton.Content = "Stop monitor";
         SetStatus("Monitoring CAN...");
