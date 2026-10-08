@@ -44,35 +44,11 @@ internal sealed class UdsClient : IDisposable
         CancellationToken cancellationToken = default)
     {
         Span<byte> parameters = stackalloc byte[2];
-        parameters[0] = 0x02; // reportDTCByStatusMask
+        parameters[0] = 0x02;
         parameters[1] = statusMask;
 
         var response = Request((byte)UdsService.ReadDtcInformation, parameters, cancellationToken);
-        if (response.Length < 2)
-            throw new InvalidOperationException("Malformed UDS DTC response.");
-
-        // After the positive SID, the payload starts with subfunction and
-        // DTC status availability mask. Request() already removed the SID.
-        if (response[0] != 0x02)
-            throw new InvalidOperationException(
-                $"Unexpected DTC subfunction 0x{response[0]:X2}; expected 0x02.");
-
-        var records = new List<UdsDtcRecord>();
-        var offset = 2;
-
-        if ((response.Length - offset) % 4 != 0)
-            throw new InvalidOperationException("Malformed UDS DTC record length.");
-
-        while (offset < response.Length)
-        {
-            var code = (uint)(response[offset] << 16 |
-                              response[offset + 1] << 8 |
-                              response[offset + 2]);
-            records.Add(new UdsDtcRecord(code, response[offset + 3]));
-            offset += 4;
-        }
-
-        return records;
+        return ParseDtcResponse(response);
     }
 
     internal string ReadVin(CancellationToken cancellationToken = default)
@@ -81,7 +57,7 @@ internal sealed class UdsClient : IDisposable
         return System.Text.Encoding.ASCII.GetString(data).Trim('\0', ' ', '\r', '\n');
     }
 
-    public void Dispose()
+    internal void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
             _channel.Dispose();
@@ -103,8 +79,10 @@ internal sealed class UdsClient : IDisposable
         return ParsePositiveResponse(service, response);
     }
 
-    private static byte[] ParsePositiveResponse(byte requestedService, byte[] response)
+    internal static byte[] ParsePositiveResponse(byte requestedService, byte[] response)
     {
+        if (response is null)
+            throw new ArgumentNullException(nameof(response));
         if (response.Length == 0)
             throw new InvalidOperationException("UDS ECU returned an empty response.");
 
@@ -126,5 +104,33 @@ internal sealed class UdsClient : IDisposable
                 $"Unexpected UDS response SID 0x{response[0]:X2}; expected 0x{expectedService:X2}.");
 
         return response.AsSpan(1).ToArray();
+    }
+
+    internal static IReadOnlyList<UdsDtcRecord> ParseDtcResponse(byte[] response)
+    {
+        if (response is null)
+            throw new ArgumentNullException(nameof(response));
+        if (response.Length < 2)
+            throw new InvalidOperationException("Malformed UDS DTC response.");
+        if (response[0] != 0x02)
+            throw new InvalidOperationException(
+                $"Unexpected DTC subfunction 0x{response[0]:X2}; expected 0x02.");
+
+        var records = new List<UdsDtcRecord>();
+        var offset = 2;
+
+        if ((response.Length - offset) % 4 != 0)
+            throw new InvalidOperationException("Malformed UDS DTC record length.");
+
+        while (offset < response.Length)
+        {
+            var code = (uint)(response[offset] << 16 |
+                              response[offset + 1] << 8 |
+                              response[offset + 2]);
+            records.Add(new UdsDtcRecord(code, response[offset + 3]));
+            offset += 4;
+        }
+
+        return records;
     }
 }
