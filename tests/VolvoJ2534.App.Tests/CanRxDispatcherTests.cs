@@ -65,6 +65,33 @@ public sealed class CanRxDispatcherTests
     }
 
     [Fact]
+    public async Task Subscription_ConcurrentReadersDoNotLoseAvailableFrames()
+    {
+        using var j2534 = new VolvoJ2534.App.J2534Native();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
+        using var subscription = dispatcher.Subscribe(1_000);
+
+        for (uint id = 0; id < 1_000; id++)
+            subscription.Publish(Frame(id));
+
+        var consumed = new System.Collections.Concurrent.ConcurrentBag<uint>();
+        var readers = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        {
+            while (consumed.Count < 1_000)
+            {
+                if (subscription.TryRead(TimeSpan.FromMilliseconds(100), CancellationToken.None, out var frame))
+                    consumed.Add(frame.ArbitrationId);
+            }
+        })).ToArray();
+
+        await Task.WhenAll(readers).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1_000, consumed.Count);
+        Assert.Equal(1_000, consumed.Distinct().Count());
+        Assert.False(subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out _));
+    }
+
+    [Fact]
     public void Subscription_TryReadHonorsCancellation()
     {
         using var j2534 = new VolvoJ2534.App.J2534Native();
