@@ -45,10 +45,86 @@ public sealed class CanBusTests
         Assert.Equal(0, adapter.WriteCount);
     }
 
+    [Fact]
+    public void SendPropagatesAdapterFailureAndError()
+    {
+        var adapter = new FakeJ2534Adapter { WriteResult = false, WriteError = "adapter write failed" };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+
+        Assert.False(bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
+            TimeSpan.FromMilliseconds(100), CancellationToken.None, out var error));
+
+        Assert.Equal("adapter write failed", error);
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
+    [Fact]
+    public void SendHonorsCancellationBeforeWriting()
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 },
+            false, TimeSpan.FromMilliseconds(100), cancellation.Token, out _));
+        Assert.Equal(0, adapter.WriteCount);
+    }
+
+    [Fact]
+    public async Task SendTimesOutWhenTransmitLockIsHeld()
+    {
+        using var writeEntered = new ManualResetEventSlim();
+        using var allowWriteToFinish = new ManualResetEventSlim();
+        var adapter = new FakeJ2534Adapter
+        {
+            WriteEntered = writeEntered,
+            AllowWriteToFinish = allowWriteToFinish
+        };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+
+        var firstSend = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
+            TimeSpan.FromSeconds(2), CancellationToken.None, out _));
+
+        try
+        {
+            Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(1)), "First write did not start.");
+            Assert.False(bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
+                TimeSpan.FromMilliseconds(30), CancellationToken.None, out var error));
+            Assert.Equal("Timed out waiting for the CAN transmit lock.", error);
+            Assert.Equal(1, adapter.WriteCount);
+        }
+        finally
+        {
+            allowWriteToFinish.Set();
+        }
+
+        Assert.True(await firstSend);
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
+    [Fact]
+    public void DisposeIsIdempotentAndSendAfterDisposeThrows()
+    {
+        var adapter = new FakeJ2534Adapter();
+        var bus = new VolvoJ2534.App.CanBus(adapter);
+
+        bus.Dispose();
+        bus.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 },
+            false, TimeSpan.FromMilliseconds(100), CancellationToken.None, out _));
+        Assert.Equal(0, adapter.WriteCount);
+    }
+
     private sealed class FakeJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
     {
         internal int WriteCount { get; private set; }
         internal VolvoJ2534.App.J2534Native.PassthruMsg LastMessage { get; private set; }
+        internal bool WriteResult { get; init; } = true;
+        internal string WriteError { get; init; } = string.Empty;
+        internal ManualResetEventSlim? WriteEntered { get; init; }
+        internal ManualResetEventSlim? AllowWriteToFinish { get; init; }
 
         public bool Load(string path, out string error) { error = string.Empty; return true; }
         public bool Open(out string error) { error = string.Empty; return true; }
@@ -64,10 +140,15 @@ public sealed class CanBusTests
         public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
         {
             LastMessage = msg;
-            WriteCount++;
-            error = string.Empty;
-            return true;
+            Interlocked.Increment(ref _writeCount);
+            WriteEntered?.Set();
+            AllowWriteToFinish?.Wait(TimeSpan.FromSeconds(3));
+            error = WriteError;
+            return WriteResult;
         }
+
+        private int _writeCount;
+        internal int WriteCount => Volatile.Read(ref _writeCount);
 
         public void Unload() { }
     }
