@@ -96,7 +96,7 @@ internal sealed class CanRxDispatcher : IDisposable
         }
     }
 
-    private readonly J2534Native _j2534;
+    private readonly IJ2534Adapter _j2534;
     private readonly object _gate = new();
     private readonly object _lifecycleGate = new();
     private readonly HashSet<Subscription> _subscriptions = new();
@@ -107,7 +107,7 @@ internal sealed class CanRxDispatcher : IDisposable
 
     internal event Action<Exception>? ReadError;
 
-    internal CanRxDispatcher(J2534Native j2534)
+    internal CanRxDispatcher(IJ2534Adapter j2534)
         => _j2534 = j2534 ?? throw new ArgumentNullException(nameof(j2534));
 
     internal Subscription Subscribe(int capacity = 4096)
