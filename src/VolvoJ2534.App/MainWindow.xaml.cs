@@ -73,8 +73,8 @@ public sealed partial class MainWindow : Window
     private sealed class EcuRow
     {
         public UdsEcuCandidate Candidate { get; }
-        public string Response => Candidate.ResponseId.ToString("X3");
-        public string Request => Candidate.RequestId?.ToString("X") ?? "-";
+        public string Response => Candidate.ResponseId.ToString(Candidate.IsExtended ? "X8" : "X3");
+        public string Request => Candidate.RequestId?.ToString(Candidate.IsExtended ? "X8" : "X3") ?? "-";
         public string RequestNote => Candidate.RequestIdNote;
         public string Type => Candidate.IsExtended ? "29-bit" : "11-bit";
         public int Frames => Candidate.ResponseCount;
