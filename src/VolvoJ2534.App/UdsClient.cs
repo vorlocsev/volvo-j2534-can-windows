@@ -54,7 +54,28 @@ internal sealed class UdsClient : IDisposable
     internal string ReadVin(CancellationToken cancellationToken = default)
     {
         var data = ReadDataByIdentifier(0xF190, cancellationToken);
-        return System.Text.Encoding.ASCII.GetString(data).Trim('\0', ' ', '\r', '\n');
+        return ParseVinData(data);
+    }
+
+    internal static string ParseVinData(byte[] data)
+    {
+        if (data is null)
+            throw new ArgumentNullException(nameof(data));
+
+        // ReadDataByIdentifier returns the DID before the DID-specific data.
+        if (data.Length < 2 || data[0] != 0xF1 || data[1] != 0x90)
+            throw new InvalidOperationException("UDS VIN response does not contain DID 0xF190.");
+
+        const int vinLength = 17;
+        if (data.Length != 2 + vinLength)
+            throw new InvalidOperationException(
+                $"UDS VIN data must contain exactly {vinLength} characters after DID 0xF190.");
+
+        var vin = System.Text.Encoding.ASCII.GetString(data, 2, vinLength);
+        if (vin.Any(ch => !char.IsAsciiLetterOrDigit(ch)))
+            throw new InvalidOperationException("UDS VIN contains non-alphanumeric characters.");
+
+        return vin;
     }
 
     public void Dispose()
