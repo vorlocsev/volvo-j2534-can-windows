@@ -66,6 +66,18 @@ public sealed class J2534SessionFailureTests
         Assert.Throws<InvalidOperationException>(() => _ = session.Bus);
     }
 
+
+    [Fact]
+    public void ConnectRejectsZeroBaudRateBeforeLoadingDriver()
+    {
+        using var session = new VolvoJ2534.App.J2534Session();
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing-j2534.dll");
+
+        Assert.False(session.Connect(missingPath, 0, out var error));
+        Assert.Contains("baud rate", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(session.IsConnected);
+    }
+
     [Fact]
     public void FailedConnectionCanBeRetriedAndRemainsDisconnected()
     {
