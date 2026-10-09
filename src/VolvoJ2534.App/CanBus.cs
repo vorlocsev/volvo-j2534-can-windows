@@ -65,6 +65,7 @@ internal sealed class CanBus : IDisposable
 
         try
         {
+            ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
 
             var message = CanDecoder.Encode(arbitrationId, data, extended);
@@ -102,6 +103,8 @@ internal sealed class CanBus : IDisposable
             return;
 
         _rx.Dispose();
-        _txLock.Dispose();
+        // Do not dispose the semaphore while a Send call may still be in
+        // its finally block. A concurrent Dispose would make Release throw.
+        // The semaphore is managed and safe to leave for collection.
     }
 }
