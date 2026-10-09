@@ -6,12 +6,13 @@ public sealed class UdsClientTests
     [Fact]
     public void ParseVinData_ExtractsVinAfterDid()
     {
-        var data = System.Text.Encoding.ASCII.GetBytes("F190YV1ABCDEF12345");
-        // The DID is binary in a UDS response, followed by the 17 ASCII VIN characters.
+        var vin = "YV1ABCDEF12345678";
+        var data = new byte[19];
         data[0] = 0xF1;
         data[1] = 0x90;
+        System.Text.Encoding.ASCII.GetBytes(vin).CopyTo(data, 2);
 
-        Assert.Equal("YV1ABCDEF12345", VolvoJ2534.App.UdsClient.ParseVinData(data));
+        Assert.Equal(vin, VolvoJ2534.App.UdsClient.ParseVinData(data));
     }
 
     [Theory]
