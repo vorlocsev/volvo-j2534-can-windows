@@ -166,11 +166,13 @@ internal sealed class UdsClient : IDisposable
         // Positive response data for ReadDTCInformation (0x19), subfunction
         // 0x02 is: subfunction, DTCStatusAvailabilityMask, DTCFormatIdentifier,
         // followed by zero or more 3-byte DTC + 1-byte status records.
-        if (response.Length < 3)
-            throw new InvalidOperationException("Malformed UDS DTC response: header is incomplete.");
+        if (response.Length == 0)
+            throw new InvalidOperationException("Malformed UDS DTC response: subfunction is missing.");
         if (response[0] != 0x02)
             throw new InvalidOperationException(
                 $"Unexpected DTC subfunction 0x{response[0]:X2}; expected 0x02.");
+        if (response.Length < 3)
+            throw new InvalidOperationException("Malformed UDS DTC response: header is incomplete.");
 
         var records = new List<UdsDtcRecord>();
         var offset = 3;
