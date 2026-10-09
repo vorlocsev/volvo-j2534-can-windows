@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace VolvoJ2534.App;
 
-internal sealed unsafe class J2534Native : IDisposable
+internal sealed unsafe class J2534Native : IJ2534Adapter, IDisposable
 {
     private const uint StatusNoError = 0;
     private const uint ErrTimeout = 0x00000009;
