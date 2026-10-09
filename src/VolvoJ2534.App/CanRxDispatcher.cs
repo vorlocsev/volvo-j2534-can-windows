@@ -202,6 +202,10 @@ internal sealed class CanRxDispatcher : IDisposable
 
     private void ReadLoop(CancellationToken token)
     {
+        // Malformed frames can arrive at bus speed. Keep diagnostics useful
+        // without flooding the UI/log with one error per bad frame.
+        long lastDecodeErrorTimestamp = 0;
+
         while (!token.IsCancellationRequested)
         {
             try
@@ -224,7 +228,14 @@ internal sealed class CanRxDispatcher : IDisposable
 
                 if (!CanDecoder.TryDecode(message, out var frame, out error))
                 {
-                    ReportReadError(new InvalidOperationException("CAN decode error: " + error));
+                    var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                    var elapsedTicks = now - lastDecodeErrorTimestamp;
+                    if (lastDecodeErrorTimestamp == 0 ||
+                        elapsedTicks >= System.Diagnostics.Stopwatch.Frequency)
+                    {
+                        lastDecodeErrorTimestamp = now;
+                        ReportReadError(new InvalidOperationException("CAN decode error: " + error));
+                    }
                     continue;
                 }
 
