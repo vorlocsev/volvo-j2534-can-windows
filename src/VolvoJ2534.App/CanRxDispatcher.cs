@@ -1,3 +1,5 @@
+using System.Threading.Channels;
+
 namespace VolvoJ2534.App;
 
 internal sealed class CanRxDispatcher : IDisposable
@@ -7,9 +9,7 @@ internal sealed class CanRxDispatcher : IDisposable
         private const int DefaultQueueCapacity = 4096;
 
         private readonly CanRxDispatcher _owner;
-        private readonly object _gate = new();
-        private readonly Queue<CanFrame> _queue = new();
-        private readonly SemaphoreSlim _signal = new(0);
+        private readonly Channel<CanFrame> _channel;
         private readonly int _capacity;
         private int _disposed;
 
@@ -19,6 +19,13 @@ internal sealed class CanRxDispatcher : IDisposable
             if (capacity < 1)
                 throw new ArgumentOutOfRangeException(nameof(capacity));
             _capacity = capacity;
+            _channel = Channel.CreateBounded<CanFrame>(new BoundedChannelOptions(capacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = false,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            });
         }
 
         internal bool TryRead(TimeSpan timeout, CancellationToken cancellationToken, out CanFrame frame)
@@ -32,21 +39,25 @@ internal sealed class CanRxDispatcher : IDisposable
 
             try
             {
-                if (!_signal.Wait(timeout, cancellationToken))
+                // WaitToReadAsync observes the channel's own state, so a
+                // concurrent drop-oldest write cannot desynchronize a separate
+                // semaphore from the queue.
+                var readable = _channel.Reader.WaitToReadAsync(cancellationToken).AsTask();
+                if (!readable.IsCompleted && !readable.Wait(timeout, cancellationToken))
                     return false;
+
+                if (!readable.GetAwaiter().GetResult())
+                    return false;
+
+                return _channel.Reader.TryRead(out frame);
             }
-            catch (ObjectDisposedException)
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (ChannelClosedException)
             {
                 return false;
-            }
-
-            lock (_gate)
-            {
-                if (_queue.Count == 0)
-                    return false;
-
-                frame = _queue.Dequeue();
-                return true;
             }
         }
 
@@ -55,30 +66,10 @@ internal sealed class CanRxDispatcher : IDisposable
             if (VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed))
                 return;
 
-            lock (_gate)
-            {
-                if (VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed))
-                    return;
-
-                if (_queue.Count >= _capacity)
-                {
-                    // Drop the oldest frame under sustained bus load. Keep the
-                    // semaphore count aligned with the queue by consuming the
-                    // permit belonging to the dropped item.
-                    _queue.Dequeue();
-                    _signal.Wait(0);
-                }
-
-                _queue.Enqueue(frame);
-                try
-                {
-                    _signal.Release();
-                }
-                catch (ObjectDisposedException)
-                {
-                    _queue.Dequeue();
-                }
-            }
+            // BoundedChannelFullMode.DropOldest atomically evicts the
+            // oldest item and publishes the new one. No separate semaphore
+            // count can drift from the number of queued frames.
+            _channel.Writer.TryWrite(frame);
         }
 
         public void Dispose()
@@ -87,10 +78,7 @@ internal sealed class CanRxDispatcher : IDisposable
                 return;
 
             _owner.Remove(this);
-            lock (_gate)
-                _queue.Clear();
-
-            _signal.Dispose();
+            _channel.Writer.TryComplete();
         }
     }
 
