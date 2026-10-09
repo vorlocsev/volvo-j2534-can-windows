@@ -110,6 +110,23 @@ public sealed class UdsClientTests
         Assert.Equal((byte)0x31, ex.NegativeResponseCode);
     }
 
+    [Theory]
+    [InlineData(0x31, "request out of range")]
+    [InlineData(0x22, "conditions not correct")]
+    [InlineData(0x11, "service not supported")]
+    [InlineData(0x78, "response pending")]
+    [InlineData(0xE1, "manufacturer-specific")]
+    public void ParsePositiveResponse_DescribesNegativeResponseCode(byte nrc, string expectedDescription)
+    {
+        var ex = Assert.Throws<VolvoJ2534.App.UdsNegativeResponseException>(() =>
+            VolvoJ2534.App.UdsClient.ParsePositiveResponse(
+                0x22,
+                new byte[] { 0x7F, 0x22, nrc }));
+
+        Assert.Contains($"NRC 0x{nrc:X2}", ex.Message);
+        Assert.Contains(expectedDescription, ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ParsePositiveResponse_RejectsWrongPositiveSid()
     {
