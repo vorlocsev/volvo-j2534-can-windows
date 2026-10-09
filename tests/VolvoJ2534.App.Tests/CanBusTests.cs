@@ -24,11 +24,9 @@ public sealed class CanBusTests
         Assert.Equal(7u, adapter.LastMessage.DataSize);
 
         var message = adapter.LastMessage;
-        fixed (byte* data = message.Data)
-        {
-            Assert.Equal(new byte[] { 0x00, 0x00, 0x07, 0xE0, 0x22, 0xF1, 0x90 },
-                new byte[] { data[0], data[1], data[2], data[3], data[4], data[5], data[6] });
-        }
+        byte* data = message.Data;
+        Assert.Equal(new byte[] { 0x00, 0x00, 0x07, 0xE0, 0x22, 0xF1, 0x90 },
+            new byte[] { data[0], data[1], data[2], data[3], data[4], data[5], data[6] });
     }
 
     [Fact]
