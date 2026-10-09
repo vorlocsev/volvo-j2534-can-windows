@@ -207,7 +207,16 @@ internal sealed class CanRxDispatcher : IDisposable
                 if (!_j2534.Read(out var message, 250, out var error))
                 {
                     if (!string.IsNullOrWhiteSpace(error))
+                    {
                         ReportReadError(new InvalidOperationException(error));
+
+                        // Some adapters return an error immediately instead of
+                        // respecting the read timeout. Back off to avoid a hot
+                        // loop that can flood the UI/log and consume a CPU core.
+                        if (token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(100)))
+                            break;
+                    }
+
                     continue;
                 }
 
