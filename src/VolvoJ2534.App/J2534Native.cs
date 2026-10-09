@@ -45,6 +45,9 @@ internal sealed unsafe class J2534Native : IDisposable
         error = string.Empty;
         try
         {
+            // Re-loading this wrapper must not overwrite a live module handle.
+            Unload();
+
             if (string.IsNullOrWhiteSpace(path))
                 throw new ArgumentException("J2534 DLL path is empty.");
 
@@ -80,12 +83,22 @@ internal sealed unsafe class J2534Native : IDisposable
     {
         error = string.Empty;
         if (_open is null) { error = "J2534 DLL is not loaded."; return false; }
+        if (_device != 0)
+        {
+            error = "J2534 device is already open.";
+            return false;
+        }
 
         var result = _open(IntPtr.Zero, out _device);
         if (result != StatusNoError)
         {
             _device = 0;
             error = FormatFailure("PassThruOpen", result);
+            return false;
+        }
+        if (_device == 0)
+        {
+            error = "PassThruOpen succeeded but returned an invalid device ID (0).";
             return false;
         }
         return true;
@@ -99,12 +112,22 @@ internal sealed unsafe class J2534Native : IDisposable
             error = "J2534 device is not open.";
             return false;
         }
+        if (_channel != 0)
+        {
+            error = "J2534 CAN channel is already connected.";
+            return false;
+        }
 
         var result = _connect(_device, ProtocolCan, 0, baudRate, out _channel);
         if (result != StatusNoError)
         {
             _channel = 0;
             error = FormatFailure("PassThruConnect", result);
+            return false;
+        }
+        if (_channel == 0)
+        {
+            error = "PassThruConnect succeeded but returned an invalid channel ID (0).";
             return false;
         }
         return true;
