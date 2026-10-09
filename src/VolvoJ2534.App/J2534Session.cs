@@ -77,7 +77,25 @@ internal sealed class J2534Session : IDisposable
         _j2534.Unload();
     }
 
-    private void HandleReadError(Exception error) => ReadError?.Invoke(error);
+    private void HandleReadError(Exception error)
+    {
+        var handlers = ReadError;
+        if (handlers is null)
+            return;
+
+        foreach (Action<Exception> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(error);
+            }
+            catch
+            {
+                // A UI/logging callback must not prevent other subscribers
+                // from receiving the adapter diagnostic.
+            }
+        }
+    }
 
     public void Dispose()
     {
