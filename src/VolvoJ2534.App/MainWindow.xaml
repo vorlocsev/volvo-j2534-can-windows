@@ -39,10 +39,11 @@
         <Grid Grid.Row="3" RowSpacing="10">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid Grid.Row="0" ColumnSpacing="10">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Button x:Name="DiscoverButton" Content="Discover ECUs" Click="Discover_Click" IsEnabled="False"/>
                 <ComboBox x:Name="EcuSelector" Grid.Column="1" PlaceholderText="Select ECU" SelectionChanged="EcuSelector_SelectionChanged"/>
                 <TextBlock x:Name="DiscoveryStatus" Grid.Column="2" VerticalAlignment="Center" Text="Not scanned"/>
+                <Button x:Name="CancelDiscoveryButton" Grid.Column="3" Content="Cancel scan" Click="CancelDiscovery_Click" IsEnabled="False"/>
             </Grid>
             <ListView x:Name="EcusView" Grid.Row="1" Height="100" SelectionMode="Single" SelectionChanged="Ecu_SelectionChanged">
                 <ListView.Header><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="100"/><ColumnDefinition Width="90"/><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Response"/><TextBlock Grid.Column="1" Text="Request"/><TextBlock Grid.Column="2" Text="Type"/><TextBlock Grid.Column="3" Text="Frames"/><TextBlock Grid.Column="4" Text="Max payload"/></Grid></ListView.Header>
