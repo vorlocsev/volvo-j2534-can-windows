@@ -16,15 +16,17 @@ internal sealed class J2534Session : IDisposable
     {
         error = string.Empty;
 
-        if (string.IsNullOrWhiteSpace(dllPath))
-        {
-            error = "J2534 DLL path is empty.";
-            return false;
-        }
-
         try
         {
+            // A new connection attempt always replaces the previous session,
+            // even when the new path is invalid.
             Disconnect();
+
+            if (string.IsNullOrWhiteSpace(dllPath))
+            {
+                error = "J2534 DLL path is empty.";
+                return false;
+            }
 
             if (!_j2534.Load(dllPath.Trim(), out error) ||
                 !_j2534.Open(out error) ||
