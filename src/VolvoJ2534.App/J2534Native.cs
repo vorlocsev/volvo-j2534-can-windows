@@ -82,7 +82,12 @@ internal sealed unsafe class J2534Native : IDisposable
         if (_open is null) { error = "J2534 DLL is not loaded."; return false; }
 
         var result = _open(IntPtr.Zero, out _device);
-        if (result != StatusNoError) { error = LastError(); return false; }
+        if (result != StatusNoError)
+        {
+            _device = 0;
+            error = FormatFailure("PassThruOpen", result);
+            return false;
+        }
         return true;
     }
 
@@ -96,7 +101,12 @@ internal sealed unsafe class J2534Native : IDisposable
         }
 
         var result = _connect(_device, ProtocolCan, 0, baudRate, out _channel);
-        if (result != StatusNoError) { error = LastError(); return false; }
+        if (result != StatusNoError)
+        {
+            _channel = 0;
+            error = FormatFailure("PassThruConnect", result);
+            return false;
+        }
         return true;
     }
 
@@ -114,12 +124,18 @@ internal sealed unsafe class J2534Native : IDisposable
         fixed (PassthruMsg* pMsg = &msg)
         {
             var result = _read(_channel, pMsg, ref count, timeout);
-            if (result == StatusNoError && count == 1) return true;
-            if (result == ErrTimeout) return false;
-        }
+            if (result == StatusNoError)
+            {
+                if (count == 1) return true;
+                if (count == 0) return false; // No frame is not a driver error.
+                error = "PassThruReadMsgs returned success with unexpected message count " + count + ".";
+                return false;
+            }
 
-        error = LastError();
-        return false;
+            if (result == ErrTimeout) return false;
+            error = FormatFailure("PassThruReadMsgs", result);
+            return false;
+        }
     }
 
     internal bool Write(in PassthruMsg msg, uint timeout, out string error)
@@ -135,8 +151,13 @@ internal sealed unsafe class J2534Native : IDisposable
         uint count = 1;
         var result = _write(_channel, &copy, ref count, timeout);
         if (result == StatusNoError && count == 1) return true;
+        if (result == StatusNoError)
+        {
+            error = "PassThruWriteMsgs returned success with unexpected message count " + count + ".";
+            return false;
+        }
 
-        error = LastError();
+        error = FormatFailure("PassThruWriteMsgs", result);
         return false;
     }
 
@@ -172,15 +193,33 @@ internal sealed unsafe class J2534Native : IDisposable
         }
     }
 
+    private string FormatFailure(string operation, uint status)
+    {
+        var detail = LastError();
+        return string.IsNullOrWhiteSpace(detail)
+            ? operation + " failed with J2534 status 0x" + status.ToString("X8") + "."
+            : operation + " failed (J2534 status 0x" + status.ToString("X8") + "): " + detail;
+    }
+
     private string LastError()
     {
-        if (_lastError is null) return "J2534 operation failed.";
+        if (_lastError is null) return string.Empty;
 
-        var buffer = new byte[256];
-        _lastError(buffer);
-        var length = Array.IndexOf(buffer, (byte)0);
-        if (length < 0) length = buffer.Length;
-        return System.Text.Encoding.ASCII.GetString(buffer, 0, length);
+        try
+        {
+            var buffer = new byte[256];
+            var result = _lastError(buffer);
+            if (result != StatusNoError) return string.Empty;
+            var length = Array.IndexOf(buffer, (byte)0);
+            if (length < 0) length = buffer.Length;
+            return System.Text.Encoding.ASCII.GetString(buffer, 0, length).Trim();
+        }
+        catch
+        {
+            // A broken optional diagnostic export must not hide the original
+            // J2534 status code or prevent session cleanup.
+            return string.Empty;
+        }
     }
 
     public void Dispose()
