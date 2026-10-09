@@ -181,15 +181,31 @@ internal sealed unsafe class J2534Native : IDisposable
 
     internal void Unload()
     {
-        Disconnect();
-        Close();
-        _open = null; _close = null; _connect = null; _disconnect = null;
-        _read = null; _write = null; _lastError = null;
+        // Attempt every cleanup stage independently. A faulty vendor driver
+        // must not prevent Close or leave delegates pointing at an unloaded DLL.
+        try { Disconnect(); }
+        catch { _channel = 0; }
 
-        if (_dll != IntPtr.Zero)
+        try { Close(); }
+        catch { _device = 0; }
+
+        _open = null;
+        _close = null;
+        _connect = null;
+        _disconnect = null;
+        _read = null;
+        _write = null;
+        _lastError = null;
+
+        var dll = _dll;
+        _dll = IntPtr.Zero;
+        if (dll != IntPtr.Zero)
         {
-            NativeLibrary.Free(_dll);
-            _dll = IntPtr.Zero;
+            try { NativeLibrary.Free(dll); }
+            catch
+            {
+                // Cleanup is best-effort; never retain stale function pointers.
+            }
         }
     }
 
