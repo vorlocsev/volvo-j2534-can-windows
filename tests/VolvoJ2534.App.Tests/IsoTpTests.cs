@@ -291,6 +291,16 @@ public sealed class IsoTpTests
         Assert.Contains("without First Frame", continuationError, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(15)]
+    [InlineData(255)]
+    public void CreateFlowControl_RejectsReservedStatus(byte status)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => VolvoJ2534.App.IsoTp.CreateFlowControl(status));
+    }
+
     [Fact]
     public void CreateFlowControl_EncodesFields()
     {
