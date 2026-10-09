@@ -53,4 +53,36 @@ public sealed class UdsEcuDiscoveryTests
     }
 
 
+
+    [Theory]
+    [InlineData(new byte[] { 0x03, 0x22, 0xF1, 0x90 })]
+    [InlineData(new byte[] { 0x03, 0x19, 0x02, 0xFF })]
+    [InlineData(new byte[] { 0x03, 0x10, 0x01, 0x00 })]
+    public void IsLikelyUdsResponse_RejectsRequestServices(byte[] data)
+    {
+        var frame = new VolvoJ2534.App.CanFrame(0x7E0, false, false, data, 0, 0);
+
+        Assert.False(VolvoJ2534.App.UdsEcuDiscovery.IsLikelyUdsResponse(frame, out var sid));
+        Assert.Null(sid);
+    }
+
+    [Fact]
+    public void IsLikelyUdsResponse_RejectsRemoteFrames()
+    {
+        var frame = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, true, new byte[] { 0x03, 0x62, 0xF1, 0x90 }, 0, 0);
+
+        Assert.False(VolvoJ2534.App.UdsEcuDiscovery.IsLikelyUdsResponse(frame, out var sid));
+        Assert.Null(sid);
+    }
+
+    [Fact]
+    public void IsLikelyUdsResponse_RejectsMalformedIsoTpFrame()
+    {
+        var frame = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { 0x10, 0x08 }, 0, 0);
+
+        Assert.False(VolvoJ2534.App.UdsEcuDiscovery.IsLikelyUdsResponse(frame, out var sid));
+        Assert.Null(sid);
+    }
 }
