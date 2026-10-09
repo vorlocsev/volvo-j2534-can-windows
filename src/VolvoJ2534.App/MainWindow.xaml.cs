@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
     private Task? _monitorTask;
     private bool _connected;
     private Task? _disconnectTask;
+    private Task<bool>? _connectTask;
     private int _total;
     private readonly Stopwatch _rate = new();
     private readonly SemaphoreSlim _udsGate = new(1, 1);
@@ -49,6 +50,7 @@ public sealed partial class MainWindow : Window
             var discoveryTask = _discoveryTask;
             var monitorTask = _monitorTask;
             var disconnectTask = _disconnectTask;
+            var connectTask = _connectTask;
             StopMonitor();
 
             try { discoveryTask?.Wait(TimeSpan.FromSeconds(2)); }
@@ -56,6 +58,8 @@ public sealed partial class MainWindow : Window
             try { monitorTask?.Wait(TimeSpan.FromSeconds(2)); }
             catch (AggregateException) { }
             try { disconnectTask?.Wait(TimeSpan.FromSeconds(2)); }
+            catch (AggregateException) { }
+            try { connectTask?.Wait(TimeSpan.FromSeconds(2)); }
             catch (AggregateException) { }
 
             var udsStopped = _udsGate.Wait(TimeSpan.FromSeconds(2));
@@ -65,7 +69,8 @@ public sealed partial class MainWindow : Window
             var discoveryStopped = discoveryTask is null || discoveryTask.IsCompleted;
             var monitorStopped = monitorTask is null || monitorTask.IsCompleted;
             var disconnectStopped = disconnectTask is null || disconnectTask.IsCompleted;
-            if (discoveryStopped && monitorStopped && udsStopped && disconnectStopped)
+            var connectStopped = connectTask is null || connectTask.IsCompleted;
+            if (discoveryStopped && monitorStopped && udsStopped && disconnectStopped && connectStopped)
                 _session.Dispose();
             // If a native adapter call is still blocked, avoid racing Dispose
             // against that call. The process is closing and will reclaim handles.
@@ -399,16 +404,60 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(DllPath.Text)) { SetStatus("Select a J2534 DLL."); return; }
+        if (string.IsNullOrWhiteSpace(DllPath.Text))
+        {
+            SetStatus("Select a J2534 DLL.");
+            return;
+        }
 
-        var baud = uint.Parse(((ComboBoxItem)BaudRate.SelectedItem).Tag.ToString()!);
-        if (!_session.Connect(DllPath.Text.Trim(), baud, out var error))
-        { SetStatus("Connection failed: " + error); return; }
+        if (BaudRate.SelectedItem is not ComboBoxItem baudItem ||
+            !uint.TryParse(baudItem.Tag?.ToString(), out var baud))
+        {
+            SetStatus("Select a valid CAN baud rate.");
+            return;
+        }
 
-        _connected = true;
-        ConnectButton.Content = "Disconnect"; StartButton.IsEnabled = true; SetUdsEnabled(true); DiscoverButton.IsEnabled = true;
-        SetStatus("Connected · J2534 · CAN");
-        await Task.CompletedTask;
+        var dllPath = DllPath.Text.Trim();
+        ConnectButton.IsEnabled = false;
+        StartButton.IsEnabled = false;
+        SetUdsEnabled(false);
+        DiscoverButton.IsEnabled = false;
+        SetStatus("Connecting to J2534...");
+        var connectTask = Task.Run(() =>
+        {
+            var connected = _session.Connect(dllPath, baud, out var error);
+            return (connected, error);
+        });
+        _connectTask = connectTask.ContinueWith(
+            completed => completed.Status == TaskStatus.RanToCompletion && completed.Result.connected,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+        try
+        {
+            var result = await connectTask;
+            if (!result.connected)
+            {
+                SetStatus("Connection failed: " + result.error);
+                return;
+            }
+
+            _connected = true;
+            ConnectButton.Content = "Disconnect";
+            StartButton.IsEnabled = true;
+            SetUdsEnabled(true);
+            DiscoverButton.IsEnabled = true;
+            SetStatus("Connected · J2534 · CAN");
+        }
+        catch (Exception ex)
+        {
+            SetStatus("Connection failed: " + ex.Message);
+        }
+        finally
+        {
+            _connectTask = null;
+            ConnectButton.IsEnabled = true;
+        }
     }
 
     private void Start_Click(object sender, RoutedEventArgs e)
