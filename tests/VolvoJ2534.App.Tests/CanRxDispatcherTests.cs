@@ -194,6 +194,43 @@ public sealed class CanRxDispatcherTests
         Assert.True(errorSeen.Wait(TimeSpan.FromSeconds(2)));
     }
 
+    [Fact]
+    public void DispatcherThrottlesRepeatedDecodeErrors()
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+        using var firstErrorSeen = new ManualResetEventSlim();
+        using var secondErrorSeen = new ManualResetEventSlim();
+        var errorCount = 0;
+
+        dispatcher.ReadError += error =>
+        {
+            if (!error.Message.StartsWith("CAN decode error:", StringComparison.Ordinal))
+                return;
+
+            var count = Interlocked.Increment(ref errorCount);
+            if (count == 1) firstErrorSeen.Set();
+            if (count == 2) secondErrorSeen.Set();
+        };
+
+        var malformed = VolvoJ2534.App.CanDecoder.Encode(0x7E8, new byte[] { 0x01 });
+        malformed.ProtocolID = 0xFFFFFFFF;
+        dispatcher.Start();
+
+        for (var i = 0; i < 5; i++)
+            adapter.Enqueue(malformed);
+
+        Assert.True(firstErrorSeen.Wait(TimeSpan.FromSeconds(2)));
+        Thread.Sleep(100);
+        Assert.Equal(1, Volatile.Read(ref errorCount));
+
+        // The dispatcher emits at most one decode diagnostic per second.
+        Thread.Sleep(1_000);
+        adapter.Enqueue(malformed);
+        Assert.True(secondErrorSeen.Wait(TimeSpan.FromSeconds(2)));
+        Assert.Equal(2, Volatile.Read(ref errorCount));
+    }
+
     private sealed class FakeJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _frames = new();
