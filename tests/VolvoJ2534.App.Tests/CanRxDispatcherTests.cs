@@ -220,6 +220,27 @@ public sealed class CanRxDispatcherTests
 
 
     [Fact]
+    public void DispatcherCanBeDisposedFromReadErrorCallback()
+    {
+        var adapter = new FakeJ2534Adapter();
+        var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+        using var callbackReturned = new ManualResetEventSlim();
+
+        dispatcher.ReadError += _ =>
+        {
+            dispatcher.Dispose();
+            callbackReturned.Set();
+        };
+
+        adapter.FailNextRead();
+        dispatcher.Start();
+
+        Assert.True(callbackReturned.Wait(TimeSpan.FromSeconds(2)),
+            "Dispose deadlocked when called from the receive worker callback.");
+        dispatcher.Dispose();
+    }
+
+    [Fact]
     public void DispatcherIsolatesThrowingReadErrorSubscriber()
     {
         var adapter = new FakeJ2534Adapter();
