@@ -40,11 +40,30 @@ public sealed partial class MainWindow : Window
         _session.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
         Closed += (_, _) =>
         {
+            // Ask background operations to stop before touching the native J2534
+            // session. Do not dispose it while a worker may still be using it.
             _discoveryCts?.Cancel();
-            try { _discoveryTask?.Wait(TimeSpan.FromSeconds(1)); }
-            catch (AggregateException) { }
+            _udsCts?.Cancel();
+
+            var discoveryTask = _discoveryTask;
+            var monitorTask = _monitorTask;
             StopMonitor();
-            _session.Dispose();
+
+            try { discoveryTask?.Wait(TimeSpan.FromSeconds(2)); }
+            catch (AggregateException) { }
+            try { monitorTask?.Wait(TimeSpan.FromSeconds(2)); }
+            catch (AggregateException) { }
+
+            var udsStopped = _udsGate.Wait(TimeSpan.FromSeconds(2));
+            if (udsStopped)
+                _udsGate.Release();
+
+            var discoveryStopped = discoveryTask is null || discoveryTask.IsCompleted;
+            var monitorStopped = monitorTask is null || monitorTask.IsCompleted;
+            if (discoveryStopped && monitorStopped && udsStopped)
+                _session.Dispose();
+            // If a native adapter call is still blocked, avoid racing Dispose
+            // against that call. The process is closing and will reclaim handles.
         };
     }
 
