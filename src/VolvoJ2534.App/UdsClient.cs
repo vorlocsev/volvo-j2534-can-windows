@@ -72,8 +72,8 @@ internal sealed class UdsClient : IDisposable
                 $"UDS VIN data must contain exactly {vinLength} characters after DID 0xF190.");
 
         var vin = System.Text.Encoding.ASCII.GetString(data, 2, vinLength);
-        if (vin.Any(ch => !char.IsAsciiLetterOrDigit(ch)))
-            throw new InvalidOperationException("UDS VIN contains non-alphanumeric characters.");
+        if (vin.Any(ch => !(ch is >= 'A' and <= 'H' or >= 'J' and <= 'N' or >= 'P' and <= 'R' or >= 'S' and <= 'Z' or >= '0' and <= '9')))
+            throw new InvalidOperationException("UDS VIN contains characters that are not permitted in a VIN.");
 
         return vin;
     }
