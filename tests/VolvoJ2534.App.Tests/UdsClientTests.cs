@@ -54,6 +54,23 @@ public sealed class UdsClientTests
             () => VolvoJ2534.App.UdsClient.ParseVinData(data));
     }
 
+    [Theory]
+    [InlineData('i')]
+    [InlineData('o')]
+    [InlineData('q')]
+    [InlineData('a')]
+    public void ParseVinData_RejectsLowercaseLetters(char lowercase)
+    {
+        var data = new byte[19];
+        data[0] = 0xF1;
+        data[1] = 0x90;
+        Array.Fill(data, (byte)'A', 2, 17);
+        data[7] = (byte)lowercase;
+
+        Assert.Throws<InvalidOperationException>(
+            () => VolvoJ2534.App.UdsClient.ParseVinData(data));
+    }
+
     [Fact]
     public void ParsePositiveResponse_ReturnsPayload()
     {
