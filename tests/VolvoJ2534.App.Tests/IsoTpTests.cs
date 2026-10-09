@@ -113,6 +113,54 @@ public sealed class IsoTpTests
     }
 
     [Fact]
+    public void Reassembler_SequenceNumberWrapsAfterFifteen()
+    {
+        var payload = Enumerable.Range(0, 120).Select(i => (byte)i).ToArray();
+        var frames = VolvoJ2534.App.IsoTp.Segment(payload);
+        var reassembler = new VolvoJ2534.App.IsoTpReassembler();
+        byte[]? result = null;
+
+        foreach (var bytes in frames)
+        {
+            var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, bytes, 0, 0);
+            Assert.True(reassembler.Push(can, out var completed, out var error), error);
+            if (completed is not null)
+                result = completed;
+        }
+
+        Assert.Equal(0x2F, frames[15][0]);
+        Assert.Equal(0x20, frames[16][0]);
+        Assert.Equal(payload, result);
+        Assert.False(reassembler.InProgress);
+    }
+
+    [Fact]
+    public void Reassembler_NewFirstFrameRestartsIncompletePayload()
+    {
+        var firstPayload = Enumerable.Range(0, 20).Select(i => (byte)i).ToArray();
+        var secondPayload = Enumerable.Range(50, 12).Select(i => (byte)i).ToArray();
+        var firstFrames = VolvoJ2534.App.IsoTp.Segment(firstPayload);
+        var secondFrames = VolvoJ2534.App.IsoTp.Segment(secondPayload);
+        var reassembler = new VolvoJ2534.App.IsoTpReassembler();
+
+        var first = new VolvoJ2534.App.CanFrame(0x7E8, false, false, firstFrames[0], 0, 0);
+        Assert.True(reassembler.Push(first, out _, out var firstError), firstError);
+        Assert.True(reassembler.InProgress);
+
+        byte[]? result = null;
+        foreach (var bytes in secondFrames)
+        {
+            var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, bytes, 0, 0);
+            Assert.True(reassembler.Push(can, out var completed, out var error), error);
+            if (completed is not null)
+                result = completed;
+        }
+
+        Assert.Equal(secondPayload, result);
+        Assert.False(reassembler.InProgress);
+    }
+
+    [Fact]
     public void ChannelOptions_RejectInvalidStandardCanId()
     {
         var options = new VolvoJ2534.App.IsoTpChannel.Options(0x800, 0x7E8);
