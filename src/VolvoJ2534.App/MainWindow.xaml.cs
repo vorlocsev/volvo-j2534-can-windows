@@ -492,12 +492,23 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private bool Matches(Frame frame)
+    private bool Matches(Frame frame) => MatchesCanIdFilter(IdFilter.Text, frame.Id);
+
+    internal static bool MatchesCanIdFilter(string query, string frameId)
     {
-        var query = IdFilter.Text.Trim().TrimStart('0');
-        if (string.IsNullOrEmpty(query)) return true;
-        query = query.PadLeft(3, '0');
-        return string.Equals(query, frame.Id.PadLeft(3, '0'), StringComparison.OrdinalIgnoreCase);
+        query = query.Trim();
+        if (query.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            query = query[2..];
+        if (query.Length == 0)
+            return true;
+
+        // Parse numerically rather than trimming leading zeroes: "0" is a
+        // real CAN-ID filter, not an empty filter that matches every frame.
+        return uint.TryParse(query, System.Globalization.NumberStyles.HexNumber,
+                   System.Globalization.CultureInfo.InvariantCulture, out var wanted) &&
+               uint.TryParse(frameId, System.Globalization.NumberStyles.HexNumber,
+                   System.Globalization.CultureInfo.InvariantCulture, out var actual) &&
+               wanted == actual;
     }
 
     private void Filter_Changed(object sender, TextChangedEventArgs e) { }
