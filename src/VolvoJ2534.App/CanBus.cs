@@ -57,7 +57,12 @@ internal sealed class CanBus : IDisposable
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        _txLock.Wait(cancellationToken);
+        if (!_txLock.Wait(timeout, cancellationToken))
+        {
+            error = "Timed out waiting for the CAN transmit lock.";
+            return false;
+        }
+
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
