@@ -131,6 +131,13 @@ internal sealed class CanRxDispatcher : IDisposable
             if (_running != 0)
                 return;
 
+            if (_worker is { IsCompleted: false })
+                throw new InvalidOperationException("The previous CAN receive worker is still stopping.");
+
+            _worker = null;
+            _cts?.Dispose();
+            _cts = null;
+
             var cts = new CancellationTokenSource();
             _cts = cts;
             _running = 1;
@@ -159,9 +166,32 @@ internal sealed class CanRxDispatcher : IDisposable
                 // ReadLoop reports recoverable adapter errors via ReadError.
             }
 
-            cts?.Dispose();
-            _cts = null;
-            _worker = null;
+            if (worker is null || worker.IsCompleted)
+            {
+                cts?.Dispose();
+                _cts = null;
+                _worker = null;
+                return;
+            }
+
+            // A native read can outlive the bounded wait. Keep the worker and
+            // CTS alive, and prevent Start() from creating a second reader.
+            _ = worker.ContinueWith(
+                completed =>
+                {
+                    cts?.Dispose();
+                    lock (_lifecycleGate)
+                    {
+                        if (ReferenceEquals(_worker, completed))
+                        {
+                            _worker = null;
+                            _cts = null;
+                        }
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
     }
 
