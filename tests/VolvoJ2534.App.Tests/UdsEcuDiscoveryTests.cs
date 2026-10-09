@@ -15,6 +15,18 @@ public sealed class UdsEcuDiscoveryTests
         Assert.Equal(8, candidate.MaxDataLength);
     }
     [Fact]
+    public void CandidateRecord_LabelsRequestIdAsInferred()
+    {
+        var inferred = new VolvoJ2534.App.UdsEcuCandidate(0x7E8, 0x7E0, false, 2, 8);
+        var unknown = new VolvoJ2534.App.UdsEcuCandidate(0x700, null, true, 1, 8);
+
+        Assert.Contains("inferred", inferred.RequestIdNote, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("verify", inferred.RequestIdNote, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unknown", unknown.RequestIdNote, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("manually", unknown.RequestIdNote, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void GuessRequestId_MapsStandardResponse()
     {
         Assert.Equal(
