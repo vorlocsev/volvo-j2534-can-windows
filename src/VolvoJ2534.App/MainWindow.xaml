@@ -34,6 +34,7 @@
             <Button Grid.Column="3" Content="Read DID" Click="ReadDid_Click" VerticalAlignment="Bottom" x:Name="ReadDidButton" IsEnabled="False"/>
             <Button x:Name="ReadVinButton" Grid.Column="4" Content="Read VIN" IsEnabled="False" Click="ReadVin_Click" VerticalAlignment="Bottom"/>
             <Button x:Name="ReadDtcButton" Grid.Column="5" Content="Read DTC (status FF)" IsEnabled="False" Click="ReadDtc_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="CancelUdsButton" Grid.Column="6" Content="Cancel UDS" IsEnabled="False" Click="CancelUds_Click" VerticalAlignment="Bottom"/>
         </Grid>
 
         <Grid Grid.Row="3" RowSpacing="10">
