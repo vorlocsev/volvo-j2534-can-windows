@@ -96,6 +96,7 @@ internal sealed class CanRxDispatcher : IDisposable
 
     private readonly J2534Native _j2534;
     private readonly object _gate = new();
+    private readonly object _lifecycleGate = new();
     private readonly HashSet<Subscription> _subscriptions = new();
     private CancellationTokenSource? _cts;
     private Task? _worker;
@@ -124,26 +125,44 @@ internal sealed class CanRxDispatcher : IDisposable
 
     internal void Start()
     {
-        ObjectDisposedException.ThrowIf(VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed), this);
-        if (Interlocked.Exchange(ref _running, 1) != 0)
-            return;
+        lock (_lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed), this);
+            if (_running != 0)
+                return;
 
-        _cts = new CancellationTokenSource();
-        _worker = Task.Run(() => ReadLoop(_cts.Token));
+            var cts = new CancellationTokenSource();
+            _cts = cts;
+            _running = 1;
+            _worker = Task.Run(() => ReadLoop(cts.Token));
+        }
     }
 
     internal void Stop()
     {
-        if (Interlocked.Exchange(ref _running, 0) == 0)
-            return;
+        lock (_lifecycleGate)
+        {
+            if (_running == 0)
+                return;
 
-        _cts?.Cancel();
-        try { _worker?.Wait(TimeSpan.FromSeconds(1)); }
-        catch (AggregateException) { }
+            _running = 0;
+            var cts = _cts;
+            var worker = _worker;
+            cts?.Cancel();
 
-        _cts?.Dispose();
-        _cts = null;
-        _worker = null;
+            try
+            {
+                worker?.Wait(TimeSpan.FromSeconds(1));
+            }
+            catch (AggregateException)
+            {
+                // ReadLoop reports recoverable adapter errors via ReadError.
+            }
+
+            cts?.Dispose();
+            _cts = null;
+            _worker = null;
+        }
     }
 
     private void ReadLoop(CancellationToken token)
