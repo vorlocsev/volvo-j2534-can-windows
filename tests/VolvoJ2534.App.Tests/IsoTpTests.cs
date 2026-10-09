@@ -177,6 +177,16 @@ public sealed class IsoTpTests
         Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
     }
 
+    [Fact]
+    public void ChannelOptions_RejectTimeoutTooLargeForStopwatchDeadline()
+    {
+        var options = new VolvoJ2534.App.IsoTpChannel.Options(
+            0x7E0, 0x7E8, RequestTimeout: TimeSpan.MaxValue);
+
+        var error = Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
+        Assert.Contains("too large", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(0x80)]
     [InlineData(0xF0)]
