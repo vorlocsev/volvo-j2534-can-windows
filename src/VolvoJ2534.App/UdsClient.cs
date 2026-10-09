@@ -96,9 +96,18 @@ internal sealed class UdsClient : IDisposable
         request[0] = service;
         parameters.CopyTo(request.AsSpan(1));
 
-        var response = _channel.Request(request, cancellationToken);
+        var response = _channel.Request(
+            request,
+            candidate => IsResponsePending(service, candidate),
+            cancellationToken);
         return ParsePositiveResponse(service, response);
     }
+
+    internal static bool IsResponsePending(byte requestedService, byte[] response)
+        => response is { Length: >= 3 } &&
+           response[0] == 0x7F &&
+           response[1] == requestedService &&
+           response[2] == 0x78;
 
     internal static byte[] ParsePositiveResponse(byte requestedService, byte[] response)
     {
