@@ -2,12 +2,12 @@ namespace VolvoJ2534.App;
 
 internal sealed class CanBus : IDisposable
 {
-    private readonly J2534Native _j2534;
+    private readonly IJ2534Adapter _j2534;
     private readonly CanRxDispatcher _rx;
     private readonly SemaphoreSlim _txLock = new(1, 1);
     private int _disposed;
 
-    internal CanBus(J2534Native j2534)
+    internal CanBus(IJ2534Adapter j2534)
     {
         _j2534 = j2534 ?? throw new ArgumentNullException(nameof(j2534));
         _rx = new CanRxDispatcher(_j2534);
