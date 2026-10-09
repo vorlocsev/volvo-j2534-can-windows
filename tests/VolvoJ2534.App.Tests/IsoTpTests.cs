@@ -64,6 +64,45 @@ public sealed class IsoTpTests
     }
 
     [Fact]
+    public void ChannelOptions_RejectInvalidStandardCanId()
+    {
+        var options = new VolvoJ2534.App.IsoTpChannel.Options(0x800, 0x7E8);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void ChannelOptions_RejectNegativeTimeout()
+    {
+        var options = new VolvoJ2534.App.IsoTpChannel.Options(
+            0x7E0, 0x7E8, RequestTimeout: TimeSpan.FromMilliseconds(-1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.Validate());
+    }
+
+    [Theory]
+    [InlineData(0x80)]
+    [InlineData(0xF0)]
+    [InlineData(0xFA)]
+    [InlineData(0xFF)]
+    public void ChannelOptions_RejectReservedRxSeparationTime(int stmin)
+    {
+        var options = new VolvoJ2534.App.IsoTpChannel.Options(
+            0x7E0, 0x7E8, RxSeparationTime: (byte)stmin);
+
+        Assert.Throws<InvalidOperationException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void ChannelOptions_AcceptsValid29BitCanIds()
+    {
+        var options = new VolvoJ2534.App.IsoTpChannel.Options(
+            0x18DA10F1, 0x18DAF110, CanExtendedId: true);
+
+        options.Validate();
+    }
+
+    [Fact]
     public void CreateFlowControl_EncodesFields()
     {
         var frame = VolvoJ2534.App.IsoTp.CreateFlowControl(0, 8, 0x0A);
