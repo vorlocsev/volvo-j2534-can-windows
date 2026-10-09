@@ -383,8 +383,17 @@ public sealed partial class MainWindow : Window
 
     private void StartMonitor()
     {
-        if (!_connected || _monitorTask is not null) return;
+        if (!_connected) return;
 
+        // A cancelled monitor may still be unwinding from a native adapter call.
+        // Never start a second reader until the previous task has actually ended.
+        if (_monitorTask is { IsCompleted: false })
+        {
+            SetStatus("Waiting for the previous CAN monitor to stop.");
+            return;
+        }
+
+        _monitorTask = null;
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
         var subscription = _session.Bus.Subscribe();
@@ -409,7 +418,6 @@ public sealed partial class MainWindow : Window
         StartButton.Content = "Start monitor";
 
         var task = _monitorTask;
-        _monitorTask = null;
 
         if (task is not null && !task.IsCompleted)
         {
@@ -417,16 +425,28 @@ public sealed partial class MainWindow : Window
             catch (AggregateException) { }
         }
 
-        if (cts is not null)
+        if (task is null || task.IsCompleted)
         {
-            if (task is null || task.IsCompleted)
-                cts.Dispose();
-            else
-                _ = task.ContinueWith(
-                    _ => cts.Dispose(),
-                    CancellationToken.None,
-                    TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default);
+            _monitorTask = null;
+            cts?.Dispose();
+        }
+        else
+        {
+            // Keep the task reference so StartMonitor cannot create a second
+            // reader while the old one is still unwinding.
+            _ = task.ContinueWith(
+                completed =>
+                {
+                    cts?.Dispose();
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (ReferenceEquals(_monitorTask, completed))
+                            _monitorTask = null;
+                    });
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
         if (_connected) SetStatus("Connected");
