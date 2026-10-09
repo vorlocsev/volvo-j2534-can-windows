@@ -72,6 +72,23 @@ public sealed class UdsClientTests
     }
 
     [Fact]
+    public void IsResponsePending_RecognizesPendingForRequestedService()
+    {
+        Assert.True(VolvoJ2534.App.UdsClient.IsResponsePending(
+            0x22, new byte[] { 0x7F, 0x22, 0x78 }));
+    }
+
+    [Theory]
+    [InlineData(0x19, new byte[] { 0x7F, 0x22, 0x78 })]
+    [InlineData(0x22, new byte[] { 0x7F, 0x22, 0x31 })]
+    [InlineData(0x22, new byte[] { 0x7F, 0x22 })]
+    [InlineData(0x22, new byte[] { 0x62, 0xF1, 0x90 })]
+    public void IsResponsePending_RejectsOtherResponses(byte service, byte[] response)
+    {
+        Assert.False(VolvoJ2534.App.UdsClient.IsResponsePending(service, response));
+    }
+
+    [Fact]
     public void ParsePositiveResponse_ReturnsPayload()
     {
         var payload = VolvoJ2534.App.UdsClient.ParsePositiveResponse(
