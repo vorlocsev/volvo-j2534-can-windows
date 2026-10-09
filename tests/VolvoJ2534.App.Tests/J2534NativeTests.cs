@@ -52,3 +52,32 @@ public sealed class J2534NativeTests
         Assert.Contains("not connected", writeError, StringComparison.OrdinalIgnoreCase);
     }
 }
+
+public sealed class J2534SessionFailureTests
+{
+    [Fact]
+    public void ConnectWithEmptyPathLeavesSessionDisconnected()
+    {
+        using var session = new VolvoJ2534.App.J2534Session();
+
+        Assert.False(session.Connect(" ", 500000, out var error));
+        Assert.Contains("path is empty", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(session.IsConnected);
+        Assert.Throws<InvalidOperationException>(() => _ = session.Bus);
+    }
+
+    [Fact]
+    public void FailedConnectionCanBeRetriedAndRemainsDisconnected()
+    {
+        using var session = new VolvoJ2534.App.J2534Session();
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing-j2534.dll");
+
+        Assert.False(session.Connect(missingPath, 500000, out var firstError));
+        Assert.False(session.IsConnected);
+        Assert.False(string.IsNullOrWhiteSpace(firstError));
+
+        Assert.False(session.Connect(missingPath, 500000, out var secondError));
+        Assert.False(session.IsConnected);
+        Assert.False(string.IsNullOrWhiteSpace(secondError));
+    }
+}
