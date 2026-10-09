@@ -95,10 +95,17 @@ internal static class IsoTp
                     return false;
                 }
 
+                var flowStatus = (byte)(frame.Data[0] & 0x0F);
+                if (flowStatus > (byte)IsoTpFlowStatus.Overflow)
+                {
+                    error = $"Invalid ISO-TP Flow Status: {flowStatus}.";
+                    return false;
+                }
+
                 result = new IsoTpFrame(
                     IsoTpFrameType.FlowControl,
                     Array.Empty<byte>(),
-                    FlowStatus: (IsoTpFlowStatus)(frame.Data[0] & 0x0F),
+                    FlowStatus: (IsoTpFlowStatus)flowStatus,
                     BlockSize: frame.Data[1],
                     SeparationTime: frame.Data[2]);
                 return true;
