@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window
     private readonly SemaphoreSlim _udsGate = new(1, 1);
     private CancellationTokenSource? _discoveryCts;
     private Task<IReadOnlyList<UdsEcuCandidate>>? _discoveryTask;
+    private CancellationTokenSource? _udsCts;
     private readonly ObservableCollection<EcuRow> _ecus = new();
     private int _rateFrames;
 
@@ -229,22 +230,19 @@ public sealed partial class MainWindow : Window
     {
         if (!TryParseDid(out var did)) return;
 
-        await RunUdsOperationAsync("Read DID", client => Hex(client.ReadDataByIdentifier(did)));
+        await RunUdsOperationAsync("Read DID", (client, token) => Hex(client.ReadDataByIdentifier(did, token)));
     }
 
     private async void ReadVin_Click(object sender, RoutedEventArgs e)
     {
-        await RunUdsOperationAsync("Read VIN", client =>
-        {
-            return client.ReadVin();
-        });
+        await RunUdsOperationAsync("Read VIN", (client, token) => client.ReadVin(token));
     }
 
     private async void ReadDtc_Click(object sender, RoutedEventArgs e)
     {
-        await RunUdsOperationAsync("Read DTC", client =>
+        await RunUdsOperationAsync("Read DTC", (client, token) =>
 {
-    var dtcs = client.ReadDtcByStatusMask(0xFF);
+    var dtcs = client.ReadDtcByStatusMask(0xFF, token);
     return dtcs.Count == 0
         ? "No DTCs"
         : string.Join(", ", dtcs.Select(d => $"0x{d.Code:X6}/status=0x{d.Status:X2}"));
@@ -270,7 +268,7 @@ public sealed partial class MainWindow : Window
 
     private async Task RunUdsOperationAsync(
         string operation,
-        Func<UdsClient, string> action)
+        Func<UdsClient, CancellationToken, string> action)
     {
         if (!await _udsGate.WaitAsync(0))
         {
@@ -287,14 +285,21 @@ public sealed partial class MainWindow : Window
             }
 
             using var udsClient = client;
+            using var cts = new CancellationTokenSource();
+            _udsCts = cts;
 
             SetUdsEnabled(false);
             DiscoverButton.IsEnabled = false;
             ConnectButton.IsEnabled = false;
+            CancelUdsButton.IsEnabled = true;
             SetStatus(operation + "...");
 
-            var data = await Task.Run(() => action(client));
+            var data = await Task.Run(() => action(client, cts.Token));
             SetStatus(operation + ": " + data);
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus(operation + " cancelled.");
         }
         catch (UdsNegativeResponseException ex)
         {
@@ -310,6 +315,8 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            _udsCts = null;
+            CancelUdsButton.IsEnabled = false;
             SetUdsEnabled(_connected);
             DiscoverButton.IsEnabled = _connected;
             ConnectButton.IsEnabled = true;
@@ -317,6 +324,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
+
+    private void CancelUds_Click(object sender, RoutedEventArgs e)
+    {
+        _udsCts?.Cancel();
+        CancelUdsButton.IsEnabled = false;
+        SetStatus("Cancelling UDS request...");
+    }
 
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
