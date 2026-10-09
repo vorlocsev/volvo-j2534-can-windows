@@ -100,6 +100,7 @@ internal sealed class CanRxDispatcher : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _worker;
     private int _running;
+    private int _disposed;
 
     internal event Action<Exception>? ReadError;
 
@@ -108,17 +109,22 @@ internal sealed class CanRxDispatcher : IDisposable
 
     internal Subscription Subscribe(int capacity = 4096)
     {
+        ObjectDisposedException.ThrowIf(VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed), this);
         if (capacity < 1)
             throw new ArgumentOutOfRangeException(nameof(capacity));
 
         var subscription = new Subscription(this, capacity);
         lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed), this);
             _subscriptions.Add(subscription);
+        }
         return subscription;
     }
 
     internal void Start()
     {
+        ObjectDisposedException.ThrowIf(VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed), this);
         if (Interlocked.Exchange(ref _running, 1) != 0)
             return;
 
@@ -176,6 +182,9 @@ internal sealed class CanRxDispatcher : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         Stop();
 
         Subscription[] subscribers;
