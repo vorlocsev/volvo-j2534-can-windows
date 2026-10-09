@@ -175,7 +175,11 @@ internal sealed class IsoTpReassembler
         error = string.Empty;
 
         if (!IsoTp.TryDecode(frame, out var iso, out error))
+        {
+            // A malformed frame breaks any in-flight multi-frame message.
+            Reset();
             return false;
+        }
 
         switch (iso.Type)
         {
