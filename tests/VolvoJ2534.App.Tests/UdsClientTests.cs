@@ -60,4 +60,59 @@ public sealed class UdsClientTests
             VolvoJ2534.App.UdsClient.ParseDtcResponse(
                 new byte[] { 0x02, 0xFF, 0x12, 0x34 }));
     }
+
+    [Fact]
+    public void ParsePositiveResponse_RejectsEmptyResponse()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            VolvoJ2534.App.UdsClient.ParsePositiveResponse(0x22, Array.Empty<byte>()));
+
+        Assert.Contains("empty response", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ParsePositiveResponse_RejectsNegativeResponseForDifferentService()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            VolvoJ2534.App.UdsClient.ParsePositiveResponse(
+                0x22,
+                new byte[] { 0x7F, 0x19, 0x31 }));
+
+        Assert.Contains("refers to service", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ParsePositiveResponse_RejectsTruncatedNegativeResponse()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            VolvoJ2534.App.UdsClient.ParsePositiveResponse(
+                0x22,
+                new byte[] { 0x7F, 0x22 }));
+    }
+
+    [Fact]
+    public void ParseDtcResponse_AcceptsNoDtcRecords()
+    {
+        var records = VolvoJ2534.App.UdsClient.ParseDtcResponse(
+            new byte[] { 0x02, 0xFF });
+
+        Assert.Empty(records);
+    }
+
+    [Fact]
+    public void ParseDtcResponse_RejectsUnexpectedSubfunction()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            VolvoJ2534.App.UdsClient.ParseDtcResponse(
+                new byte[] { 0x01, 0xFF }));
+
+        Assert.Contains("expected 0x02", ex.Message);
+    }
+
+    [Fact]
+    public void ParseDtcResponse_RejectsResponseShorterThanHeader()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            VolvoJ2534.App.UdsClient.ParseDtcResponse(new byte[] { 0x02 }));
+    }
 }
