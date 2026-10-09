@@ -27,6 +27,27 @@ internal sealed class IsoTpChannel : IDisposable
 
         internal TimeSpan EffectiveRequestTimeout =>
             RequestTimeout == default ? TimeSpan.FromSeconds(5) : RequestTimeout;
+
+        internal void Validate()
+        {
+            ValidateId(RequestId, CanExtendedId, nameof(RequestId));
+            ValidateId(ResponseId, CanExtendedId, nameof(ResponseId));
+
+            if (MaxWaitFlowControls < 0)
+                throw new ArgumentOutOfRangeException(nameof(MaxWaitFlowControls));
+
+            ValidateTimeout(FrameTimeout, nameof(FrameTimeout));
+            ValidateTimeout(FlowControlTimeout, nameof(FlowControlTimeout));
+            ValidateTimeout(ConsecutiveFrameTimeout, nameof(ConsecutiveFrameTimeout));
+            ValidateTimeout(RequestTimeout, nameof(RequestTimeout));
+            ValidateSeparationTime(RxSeparationTime);
+        }
+
+        private static void ValidateTimeout(TimeSpan value, string name)
+        {
+            if (value < TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(name, "Timeout must be positive or zero to use the default.");
+        }
     }
 
     private readonly CanBus _bus;
@@ -37,16 +58,15 @@ internal sealed class IsoTpChannel : IDisposable
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+
+        // Validate before creating a subscription so invalid options cannot
+        // leave a registered receiver behind.
+        _options.Validate();
         _rx = _bus.Subscribe();
 
         // CAN Extended ID (29-bit) is independent from ISO-TP extended
         // addressing (an additional address byte in the CAN data field).
         // This channel currently implements ISO-TP normal addressing only.
-        ValidateId(_options.RequestId, _options.CanExtendedId, nameof(options.RequestId));
-        ValidateId(_options.ResponseId, _options.CanExtendedId, nameof(options.ResponseId));
-
-        if (_options.MaxWaitFlowControls < 0)
-            throw new ArgumentOutOfRangeException(nameof(options.MaxWaitFlowControls));
     }
 
     internal byte[] Request(ReadOnlySpan<byte> payload, CancellationToken cancellationToken = default)
@@ -310,7 +330,7 @@ internal sealed class IsoTpChannel : IDisposable
         return TimeSpan.FromTicks((value - 0xF0) * 1000);
     }
 
-    private static void ValidateSeparationTime(byte value)
+    internal static void ValidateSeparationTime(byte value)
     {
         if (value is >= 0x80 and <= 0xF0)
             throw new InvalidOperationException($"Reserved ISO-TP STmin value: 0x{value:X2}.");
