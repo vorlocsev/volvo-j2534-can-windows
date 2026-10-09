@@ -21,6 +21,16 @@ internal sealed class UdsEcuDiscovery
         if (duration <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(duration));
 
+        // The receive loop waits synchronously on the CAN subscription. Run it
+        // off the UI thread so an 8-second passive scan does not freeze WinUI.
+        return Task.Run<IReadOnlyList<UdsEcuCandidate>>(
+            () => Scan(duration, cancellationToken), cancellationToken);
+    }
+
+    private IReadOnlyList<UdsEcuCandidate> Scan(
+        TimeSpan duration,
+        CancellationToken cancellationToken)
+    {
         using var subscription = _bus.Subscribe();
         var observations = new Dictionary<(uint Id, bool Extended), Observation>();
         var end = DateTime.UtcNow + duration;
@@ -54,7 +64,7 @@ internal sealed class UdsEcuDiscovery
             observation.MaxLength = Math.Max(observation.MaxLength, frame.Data.Length);
         }
 
-        return Task.FromResult<IReadOnlyList<UdsEcuCandidate>>(observations.Values
+        return observations.Values
             .OrderByDescending(x => x.Count)
             .Select(x => new UdsEcuCandidate(
                 x.Id,
@@ -62,7 +72,7 @@ internal sealed class UdsEcuDiscovery
                 x.IsExtended,
                 x.Count,
                 x.MaxLength))
-            .ToArray());
+            .ToArray();
     }
 
     internal static bool IsLikelyUdsResponse(CanFrame frame, out byte? responseService)
