@@ -22,18 +22,18 @@ internal sealed class J2534Session : IDisposable
             return false;
         }
 
-        Disconnect();
-
-        if (!_j2534.Load(dllPath.Trim(), out error) ||
-            !_j2534.Open(out error) ||
-            !_j2534.Connect(baudRate, out error))
-        {
-            _j2534.Unload();
-            return false;
-        }
-
         try
         {
+            Disconnect();
+
+            if (!_j2534.Load(dllPath.Trim(), out error) ||
+                !_j2534.Open(out error) ||
+                !_j2534.Connect(baudRate, out error))
+            {
+                _j2534.Unload();
+                return false;
+            }
+
             _bus = new CanBus(_j2534);
             _bus.ReadError += HandleReadError;
             _bus.Start();
@@ -41,8 +41,17 @@ internal sealed class J2534Session : IDisposable
         }
         catch (Exception ex)
         {
-            _bus?.Dispose();
-            _bus = null;
+            // Vendor DLL entry points can throw despite their native ABI.
+            // Cleanup must run for failures during Open/Connect as well as
+            // failures while starting the receive worker.
+            if (_bus is not null)
+            {
+                _bus.ReadError -= HandleReadError;
+                try { _bus.Dispose(); }
+                catch { /* Continue releasing the native session. */ }
+                _bus = null;
+            }
+
             _j2534.Unload();
             error = ex.Message;
             return false;
