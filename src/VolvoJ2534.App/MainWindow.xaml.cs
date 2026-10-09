@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _cts;
     private Task? _monitorTask;
     private bool _connected;
+    private Task? _disconnectTask;
     private int _total;
     private readonly Stopwatch _rate = new();
     private readonly SemaphoreSlim _udsGate = new(1, 1);
@@ -47,11 +48,14 @@ public sealed partial class MainWindow : Window
 
             var discoveryTask = _discoveryTask;
             var monitorTask = _monitorTask;
+            var disconnectTask = _disconnectTask;
             StopMonitor();
 
             try { discoveryTask?.Wait(TimeSpan.FromSeconds(2)); }
             catch (AggregateException) { }
             try { monitorTask?.Wait(TimeSpan.FromSeconds(2)); }
+            catch (AggregateException) { }
+            try { disconnectTask?.Wait(TimeSpan.FromSeconds(2)); }
             catch (AggregateException) { }
 
             var udsStopped = _udsGate.Wait(TimeSpan.FromSeconds(2));
@@ -60,7 +64,8 @@ public sealed partial class MainWindow : Window
 
             var discoveryStopped = discoveryTask is null || discoveryTask.IsCompleted;
             var monitorStopped = monitorTask is null || monitorTask.IsCompleted;
-            if (discoveryStopped && monitorStopped && udsStopped)
+            var disconnectStopped = disconnectTask is null || disconnectTask.IsCompleted;
+            if (discoveryStopped && monitorStopped && udsStopped && disconnectStopped)
                 _session.Dispose();
             // If a native adapter call is still blocked, avoid racing Dispose
             // against that call. The process is closing and will reclaim handles.
@@ -367,8 +372,30 @@ public sealed partial class MainWindow : Window
                 return;
             }
             _udsGate.Release();
-            StopMonitor(); _session.Disconnect(); _connected = false;
-            ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetUdsEnabled(false); DiscoverButton.IsEnabled = false; SetStatus("Disconnected");
+            StopMonitor();
+            ConnectButton.IsEnabled = false;
+            StartButton.IsEnabled = false;
+            SetUdsEnabled(false);
+            DiscoverButton.IsEnabled = false;
+            SetStatus("Disconnecting J2534...");
+            var disconnectTask = Task.Run(() => _session.Disconnect());
+            _disconnectTask = disconnectTask;
+            try
+            {
+                await disconnectTask;
+                _connected = false;
+                ConnectButton.Content = "Connect";
+                SetStatus("Disconnected");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Disconnect failed: " + ex.Message);
+            }
+            finally
+            {
+                _disconnectTask = null;
+                ConnectButton.IsEnabled = true;
+            }
             return;
         }
 
