@@ -75,6 +75,7 @@ public sealed partial class MainWindow : Window
         public UdsEcuCandidate Candidate { get; }
         public string Response => Candidate.ResponseId.ToString("X3");
         public string Request => Candidate.RequestId?.ToString("X") ?? "-";
+        public string RequestNote => Candidate.RequestIdNote;
         public string Type => Candidate.IsExtended ? "29-bit" : "11-bit";
         public int Frames => Candidate.ResponseCount;
         public string MaxPayload => Candidate.MaxDataLength?.ToString() ?? "-";
@@ -107,7 +108,9 @@ public sealed partial class MainWindow : Window
             {
                 var row = new EcuRow(candidate);
                 _ecus.Add(row);
-                EcuSelector.Items.Add($"{row.Request} → {row.Response}");
+                EcuSelector.Items.Add(row.Candidate.RequestId is null
+                    ? $"{row.Request} → {row.Response} (request ID unknown)"
+                    : $"{row.Request} → {row.Response} (inferred)");
             }
 
             if (found.Count > 0)
@@ -181,7 +184,8 @@ public sealed partial class MainWindow : Window
             $"Response: 0x{row.Candidate.ResponseId:X}  ·  " +
             $"Type: {(row.Candidate.IsExtended ? "29-bit" : "11-bit")}  ·  " +
             $"Observed frames: {row.Candidate.ResponseCount}  ·  " +
-            $"Max payload: {row.Candidate.MaxDataLength?.ToString() ?? "-"} bytes";
+            $"Max payload: {row.Candidate.MaxDataLength?.ToString() ?? "-"} bytes" + Environment.NewLine +
+            row.RequestNote;
     }
 
     private void SetUdsEnabled(bool enabled)
