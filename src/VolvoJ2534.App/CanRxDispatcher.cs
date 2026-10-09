@@ -104,6 +104,7 @@ internal sealed class CanRxDispatcher : IDisposable
     private Task? _worker;
     private int _running;
     private int _disposed;
+    private int _workerThreadId;
 
     internal event Action<Exception>? ReadError;
 
@@ -162,6 +163,11 @@ internal sealed class CanRxDispatcher : IDisposable
             _running = 0;
             cts?.Cancel();
 
+            // Stop can be invoked by a ReadError callback on the receive
+            // worker itself. Never synchronously wait for the current thread.
+            if (Volatile.Read(ref _workerThreadId) == Environment.CurrentManagedThreadId)
+                return;
+
             try
             {
                 worker?.Wait(TimeSpan.FromSeconds(1));
@@ -202,6 +208,8 @@ internal sealed class CanRxDispatcher : IDisposable
 
     private void ReadLoop(CancellationToken token)
     {
+        Volatile.Write(ref _workerThreadId, Environment.CurrentManagedThreadId);
+
         // Malformed frames can arrive at bus speed. Keep diagnostics useful
         // without flooding the UI/log with one error per bad frame.
         long lastDecodeErrorTimestamp = 0;
@@ -301,6 +309,22 @@ internal sealed class CanRxDispatcher : IDisposable
         lock (_lifecycleGate)
             worker = _worker;
 
+        // A ReadError handler runs on the receive worker. Waiting for that
+        // same task from inside its callback would deadlock. Defer final
+        // subscription cleanup until the worker has returned instead.
+        if (Volatile.Read(ref _workerThreadId) == Environment.CurrentManagedThreadId)
+        {
+            if (worker is not null)
+                _ = worker.ContinueWith(
+                    _ => DisposeSubscriptions(),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            else
+                DisposeSubscriptions();
+            return;
+        }
+
         try
         {
             worker?.GetAwaiter().GetResult();
@@ -311,6 +335,11 @@ internal sealed class CanRxDispatcher : IDisposable
             // must still proceed after the task has definitively completed.
         }
 
+        DisposeSubscriptions();
+    }
+
+    private void DisposeSubscriptions()
+    {
         Subscription[] subscribers;
         lock (_gate)
         {
