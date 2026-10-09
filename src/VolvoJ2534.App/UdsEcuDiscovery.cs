@@ -7,7 +7,14 @@ internal sealed record UdsEcuCandidate(
     uint? RequestId,
     bool IsExtended,
     int ResponseCount,
-    int? MaxDataLength);
+    int? MaxDataLength)
+{
+    // The scan observes response IDs only; a matching request ID is inferred
+    // from common addressing conventions and has not been confirmed on the bus.
+    internal string RequestIdNote => RequestId is null
+        ? "Request ID unknown — enter and verify it manually."
+        : "Request ID inferred from standard addressing — verify before sending.";
+}
 
 internal sealed class UdsEcuDiscovery
 {
