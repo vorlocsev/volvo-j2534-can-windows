@@ -28,6 +28,12 @@ internal sealed class J2534Session : IDisposable
                 return false;
             }
 
+            if (baudRate == 0)
+            {
+                error = "CAN baud rate must be greater than zero.";
+                return false;
+            }
+
             if (!_j2534.Load(dllPath.Trim(), out error) ||
                 !_j2534.Open(out error) ||
                 !_j2534.Connect(baudRate, out error))
