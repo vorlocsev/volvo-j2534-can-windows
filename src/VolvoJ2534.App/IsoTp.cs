@@ -156,7 +156,12 @@ internal static class IsoTp
     }
 
     internal static byte[] CreateFlowControl(byte status = 0, byte blockSize = 0, byte separationTime = 0)
-        => new[] { (byte)(0x30 | (status & 0x0F)), blockSize, separationTime, (byte)0, (byte)0, (byte)0, (byte)0, (byte)0 };
+    {
+        if (status > (byte)IsoTpFlowStatus.Overflow)
+            throw new ArgumentOutOfRangeException(nameof(status), "ISO-TP Flow Status must be 0, 1, or 2.");
+
+        return new[] { (byte)(0x30 | status), blockSize, separationTime, (byte)0, (byte)0, (byte)0, (byte)0, (byte)0 };
+    }
 }
 
 internal sealed class IsoTpReassembler
