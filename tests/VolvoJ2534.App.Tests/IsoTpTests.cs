@@ -102,6 +102,42 @@ public sealed class IsoTpTests
         options.Validate();
     }
 
+    [Theory]
+    [InlineData(0x00)]
+    [InlineData(0x7F)]
+    [InlineData(0xF1)]
+    [InlineData(0xF9)]
+    public void ChannelOptions_AcceptsValidRxSeparationTime(int stmin)
+    {
+        var options = new VolvoJ2534.App.IsoTpChannel.Options(
+            0x7E0, 0x7E8, RxSeparationTime: (byte)stmin);
+
+        options.Validate();
+    }
+
+    [Theory]
+    [InlineData(0x80)]
+    [InlineData(0x81)]
+    [InlineData(0xEF)]
+    [InlineData(0xF0)]
+    [InlineData(0xFA)]
+    [InlineData(0xFE)]
+    public void ValidateSeparationTime_RejectsReservedValues(int stmin)
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => VolvoJ2534.App.IsoTpChannel.ValidateSeparationTime((byte)stmin));
+    }
+
+    [Fact]
+    public void TryDecode_RejectsFlowControlWithoutAllFields()
+    {
+        var can = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { 0x30, 0x00 }, 0, 0);
+
+        Assert.False(VolvoJ2534.App.IsoTp.TryDecode(can, out _, out var error));
+        Assert.Contains("Flow Control", error, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void CreateFlowControl_EncodesFields()
     {
