@@ -26,6 +26,8 @@ public sealed partial class MainWindow : Window
     private int _total;
     private readonly Stopwatch _rate = new();
     private readonly SemaphoreSlim _udsGate = new(1, 1);
+    private CancellationTokenSource? _discoveryCts;
+    private Task<IReadOnlyList<UdsEcuCandidate>>? _discoveryTask;
     private readonly ObservableCollection<EcuRow> _ecus = new();
     private int _rateFrames;
 
@@ -35,7 +37,7 @@ public sealed partial class MainWindow : Window
         FramesView.ItemsSource = _frames;
         EcusView.ItemsSource = _ecus;
         _session.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
-        Closed += (_, _) => { StopMonitor(); _udsGate.Dispose(); _session.Dispose(); };
+        Closed += (_, _) => { _discoveryCts?.Cancel(); StopMonitor(); _session.Dispose(); };
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
@@ -57,7 +59,13 @@ public sealed partial class MainWindow : Window
     {
         if (!_connected) return;
 
+        if (_discoveryCts is not null) return;
+
+        var cts = new CancellationTokenSource();
+        _discoveryCts = cts;
         DiscoverButton.IsEnabled = false;
+        CancelDiscoveryButton.IsEnabled = true;
+        ConnectButton.IsEnabled = false;
         DiscoveryStatus.Text = "Scanning...";
         _ecus.Clear();
         EcuSelector.Items.Clear();
@@ -65,7 +73,8 @@ public sealed partial class MainWindow : Window
         try
         {
             var discovery = new UdsEcuDiscovery(_session.Bus);
-            var found = await discovery.ScanAsync(TimeSpan.FromSeconds(8));
+            _discoveryTask = discovery.ScanAsync(TimeSpan.FromSeconds(8), cts.Token);
+            var found = await _discoveryTask;
 
             foreach (var candidate in found)
             {
@@ -97,8 +106,20 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            _discoveryTask = null;
+            _discoveryCts = null;
+            cts.Dispose();
+            CancelDiscoveryButton.IsEnabled = false;
             DiscoverButton.IsEnabled = _connected;
+            ConnectButton.IsEnabled = true;
         }
+    }
+
+    private void CancelDiscovery_Click(object sender, RoutedEventArgs e)
+    {
+        _discoveryCts?.Cancel();
+        DiscoveryStatus.Text = "Cancelling...";
+        CancelDiscoveryButton.IsEnabled = false;
     }
 
     private void Ecu_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -261,6 +282,8 @@ public sealed partial class MainWindow : Window
             using var udsClient = client;
 
             SetUdsEnabled(false);
+            DiscoverButton.IsEnabled = false;
+            ConnectButton.IsEnabled = false;
             SetStatus(operation + "...");
 
             var data = await Task.Run(() => action(client));
@@ -281,6 +304,8 @@ public sealed partial class MainWindow : Window
         finally
         {
             SetUdsEnabled(_connected);
+            DiscoverButton.IsEnabled = _connected;
+            ConnectButton.IsEnabled = true;
             _udsGate.Release();
         }
     }
@@ -290,6 +315,12 @@ public sealed partial class MainWindow : Window
     {
         if (_connected)
         {
+            if (_discoveryCts is not null || !_udsGate.Wait(0))
+            {
+                SetStatus("Wait for the active diagnostic operation to finish before disconnecting.");
+                return;
+            }
+            _udsGate.Release();
             StopMonitor(); _session.Disconnect(); _connected = false;
             ConnectButton.Content = "Connect"; StartButton.IsEnabled = false; SetUdsEnabled(false); DiscoverButton.IsEnabled = false; SetStatus("Disconnected");
             return;
