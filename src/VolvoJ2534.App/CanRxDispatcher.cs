@@ -169,25 +169,38 @@ internal sealed class CanRxDispatcher : IDisposable
     {
         while (!token.IsCancellationRequested)
         {
-            if (!_j2534.Read(out var message, 250, out var error))
+            try
             {
-                if (!string.IsNullOrWhiteSpace(error))
-                    ReportReadError(new InvalidOperationException(error));
-                continue;
-            }
+                if (!_j2534.Read(out var message, 250, out var error))
+                {
+                    if (!string.IsNullOrWhiteSpace(error))
+                        ReportReadError(new InvalidOperationException(error));
+                    continue;
+                }
 
-            if (!CanDecoder.TryDecode(message, out var frame, out error))
+                if (!CanDecoder.TryDecode(message, out var frame, out error))
+                {
+                    ReportReadError(new InvalidOperationException("CAN decode error: " + error));
+                    continue;
+                }
+
+                Subscription[] subscribers;
+                lock (_gate)
+                    subscribers = _subscriptions.ToArray();
+
+                foreach (var subscriber in subscribers)
+                    subscriber.Publish(frame);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                ReportReadError(new InvalidOperationException("CAN decode error: " + error));
-                continue;
+                // Native adapter failures should be visible to the UI, but a
+                // transient exception must not silently kill the receive task.
+                ReportReadError(ex);
+
+                // Avoid a hot loop if the adapter keeps throwing immediately.
+                if (token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(100)))
+                    break;
             }
-
-            Subscription[] subscribers;
-            lock (_gate)
-                subscribers = _subscriptions.ToArray();
-
-            foreach (var subscriber in subscribers)
-                subscriber.Publish(frame);
         }
     }
 
