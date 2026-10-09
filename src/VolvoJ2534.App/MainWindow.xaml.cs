@@ -322,7 +322,9 @@ public sealed partial class MainWindow : Window
         }
         catch (UdsNegativeResponseException ex)
         {
-            SetStatus(operation + " rejected: NRC 0x" + ex.NegativeResponseCode.ToString("X2"));
+            // Preserve the NRC explanation supplied by UdsClient so the UI
+            // shows a useful reason instead of only the hexadecimal code.
+            SetStatus(operation + " rejected: " + ex.Message);
         }
         catch (TimeoutException ex)
         {
