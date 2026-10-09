@@ -2,6 +2,20 @@ namespace VolvoJ2534.App.Tests;
 
 public sealed unsafe class CanDecoderTests
 {
+    [Theory]
+    [InlineData("7E0", "7E0", true)]
+    [InlineData("0x7e0", "7E0", true)]
+    [InlineData("000", "0", true)]
+    [InlineData("0", "7E0", false)]
+    [InlineData("", "7E0", true)]
+    [InlineData("not-hex", "7E0", false)]
+    [InlineData("18DAF110", "18DAF110", true)]
+    [InlineData("18DAF110", "18DAF111", false)]
+    public void MatchesCanIdFilter_HandlesHexAndZeroCorrectly(string query, string frameId, bool expected)
+    {
+        Assert.Equal(expected, VolvoJ2534.App.MainWindow.MatchesCanIdFilter(query, frameId));
+    }
+
     [Fact]
     public void EncodeDecode_StandardCanId()
     {
