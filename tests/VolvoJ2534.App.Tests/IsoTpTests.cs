@@ -45,6 +45,29 @@ public sealed class IsoTpTests
     }
 
     [Fact]
+    public void Segment_MaximumPayload_UsesValidFirstFrameLength()
+    {
+        var payload = Enumerable.Range(0, VolvoJ2534.App.IsoTp.MaxPayloadLength)
+            .Select(i => (byte)(i & 0xFF))
+            .ToArray();
+
+        var frames = VolvoJ2534.App.IsoTp.Segment(payload);
+
+        Assert.Equal(0x1F, frames[0][0]);
+        Assert.Equal(0xFF, frames[0][1]);
+        Assert.All(frames, frame => Assert.Equal(8, frame.Length));
+    }
+
+    [Fact]
+    public void Segment_RejectsPayloadAboveMaximum()
+    {
+        var payload = new byte[VolvoJ2534.App.IsoTp.MaxPayloadLength + 1];
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => VolvoJ2534.App.IsoTp.Segment(payload));
+    }
+
+    [Fact]
     public void Reassembler_RejectsSequenceMismatch()
     {
         var payload = Enumerable.Range(0, 12).Select(i => (byte)i).ToArray();
