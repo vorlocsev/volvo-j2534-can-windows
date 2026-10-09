@@ -70,7 +70,14 @@ internal sealed class IsoTpChannel : IDisposable
     }
 
     internal byte[] Request(ReadOnlySpan<byte> payload, CancellationToken cancellationToken = default)
+        => Request(payload, static _ => false, cancellationToken);
+
+    internal byte[] Request(
+        ReadOnlySpan<byte> payload,
+        Func<byte[], bool> isInterimResponse,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(isInterimResponse);
         if (payload.Length == 0 || payload.Length > IsoTp.MaxPayloadLength)
             throw new ArgumentOutOfRangeException(nameof(payload),
                 $"ISO-TP payload must be 1..{IsoTp.MaxPayloadLength} bytes.");
@@ -82,7 +89,7 @@ internal sealed class IsoTpChannel : IDisposable
         if (frames.Count == 1)
         {
             WriteCan(_options.RequestId, frames[0], deadline, cancellationToken);
-            return ReceivePayload(deadline, cancellationToken);
+            return ReceiveFinalPayload(deadline, cancellationToken, isInterimResponse);
         }
 
         WriteCan(_options.RequestId, frames[0], deadline, cancellationToken);
@@ -115,7 +122,20 @@ internal sealed class IsoTpChannel : IDisposable
             }
         }
 
-        return ReceivePayload(deadline, cancellationToken);
+        return ReceiveFinalPayload(deadline, cancellationToken, isInterimResponse);
+    }
+
+    private byte[] ReceiveFinalPayload(
+        long deadline,
+        CancellationToken cancellationToken,
+        Func<byte[], bool> isInterimResponse)
+    {
+        while (true)
+        {
+            var response = ReceivePayload(deadline, cancellationToken);
+            if (!isInterimResponse(response))
+                return response;
+        }
     }
 
     private byte[] ReceivePayload(long deadline, CancellationToken cancellationToken)
