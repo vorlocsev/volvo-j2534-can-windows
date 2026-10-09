@@ -22,6 +22,43 @@ public sealed class CanRxDispatcherTests
         Assert.False(subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out _));
     }
 
+    [Fact]
+    public void Subscription_TryReadHonorsCancellation()
+    {
+        using var j2534 = new VolvoJ2534.App.J2534Native();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
+        using var subscription = dispatcher.Subscribe();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            subscription.TryRead(TimeSpan.FromSeconds(1), cancellation.Token, out _));
+    }
+
+    [Fact]
+    public void Subscription_ReturnsFalseAfterDisposal()
+    {
+        using var j2534 = new VolvoJ2534.App.J2534Native();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
+        var subscription = dispatcher.Subscribe();
+        subscription.Dispose();
+
+        Assert.False(subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out _));
+        subscription.Publish(Frame(0x100));
+    }
+
+    [Fact]
+    public void Dispatcher_RejectsStartAndSubscribeAfterDisposal()
+    {
+        using var j2534 = new VolvoJ2534.App.J2534Native();
+        var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
+        dispatcher.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => dispatcher.Start());
+        Assert.Throws<ObjectDisposedException>(() => dispatcher.Subscribe());
+        dispatcher.Dispose();
+    }
+
     private static VolvoJ2534.App.CanFrame Frame(uint id) =>
         new(id, false, false, new byte[] { 0x00 }, 0, 0);
 }
