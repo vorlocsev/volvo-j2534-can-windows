@@ -37,7 +37,14 @@ public sealed partial class MainWindow : Window
         FramesView.ItemsSource = _frames;
         EcusView.ItemsSource = _ecus;
         _session.ReadError += ex => DispatcherQueue.TryEnqueue(() => SetStatus("Read error: " + ex.Message));
-        Closed += (_, _) => { _discoveryCts?.Cancel(); StopMonitor(); _session.Dispose(); };
+        Closed += (_, _) =>
+        {
+            _discoveryCts?.Cancel();
+            try { _discoveryTask?.Wait(TimeSpan.FromSeconds(1)); }
+            catch (AggregateException) { }
+            StopMonitor();
+            _session.Dispose();
+        };
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
