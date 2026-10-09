@@ -117,6 +117,21 @@ public sealed class CanRxDispatcherTests
     }
 
     [Fact]
+    public void Dispatcher_CanStopRestartAndDisposeRepeatedly()
+    {
+        using var j2534 = new VolvoJ2534.App.J2534Native();
+        var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
+
+        dispatcher.Start();
+        dispatcher.Stop();
+        dispatcher.Start();
+        dispatcher.Stop();
+        dispatcher.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => dispatcher.Start());
+    }
+
+    [Fact]
     public void Dispatcher_RejectsStartAndSubscribeAfterDisposal()
     {
         using var j2534 = new VolvoJ2534.App.J2534Native();
