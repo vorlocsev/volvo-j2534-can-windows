@@ -178,6 +178,22 @@ public sealed class CanRxDispatcherTests
         Assert.Equal((uint)0x7E8, frame.ArbitrationId);
     }
 
+
+    [Fact]
+    public void DispatcherIsolatesThrowingReadErrorSubscriber()
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+        using var errorSeen = new ManualResetEventSlim();
+
+        dispatcher.ReadError += _ => throw new InvalidOperationException("simulated UI subscriber failure");
+        dispatcher.ReadError += _ => errorSeen.Set();
+        adapter.FailNextRead();
+        dispatcher.Start();
+
+        Assert.True(errorSeen.Wait(TimeSpan.FromSeconds(2)));
+    }
+
     private sealed class FakeJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _frames = new();
