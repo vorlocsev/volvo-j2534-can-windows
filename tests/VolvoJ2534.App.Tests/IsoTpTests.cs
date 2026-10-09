@@ -256,6 +256,19 @@ public sealed class IsoTpTests
         Assert.Contains("Flow Control", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(0x33)]
+    [InlineData(0x34)]
+    [InlineData(0x3F)]
+    public void TryDecode_RejectsReservedFlowControlStatus(int pci)
+    {
+        var can = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { (byte)pci, 0x00, 0x00 }, 0, 0);
+
+        Assert.False(VolvoJ2534.App.IsoTp.TryDecode(can, out _, out var error));
+        Assert.Contains("Flow Status", error, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void CreateFlowControl_EncodesFields()
     {
