@@ -151,6 +151,27 @@ public sealed class IsoTpTests
             () => VolvoJ2534.App.IsoTpChannel.ValidateSeparationTime((byte)stmin));
     }
 
+    [Theory]
+    [InlineData(new byte[] { 0x10, 0x08 })]
+    [InlineData(new byte[] { 0x10 })]
+    public void TryDecode_RejectsFirstFrameWithoutPayload(byte[] data)
+    {
+        var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, data, 0, 0);
+
+        Assert.False(VolvoJ2534.App.IsoTp.TryDecode(can, out _, out var error));
+        Assert.Contains("First Frame", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryDecode_RejectsConsecutiveFrameWithoutPayload()
+    {
+        var can = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { 0x21 }, 0, 0);
+
+        Assert.False(VolvoJ2534.App.IsoTp.TryDecode(can, out _, out var error));
+        Assert.Contains("Consecutive Frame", error, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void TryDecode_RejectsFlowControlWithoutAllFields()
     {
