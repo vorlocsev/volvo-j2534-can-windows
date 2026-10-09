@@ -2,6 +2,41 @@ namespace VolvoJ2534.App.Tests;
 
 public sealed class UdsClientTests
 {
+
+    [Fact]
+    public void ParseVinData_ExtractsVinAfterDid()
+    {
+        var data = System.Text.Encoding.ASCII.GetBytes("F190YV1ABCDEF12345");
+        // The DID is binary in a UDS response, followed by the 17 ASCII VIN characters.
+        data[0] = 0xF1;
+        data[1] = 0x90;
+
+        Assert.Equal("YV1ABCDEF12345", VolvoJ2534.App.UdsClient.ParseVinData(data));
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0x31, 0x32, 0x33 })]
+    [InlineData(new byte[] { 0xF1, 0x90 })]
+    [InlineData(new byte[] { 0xF1, 0x90, 0x59, 0x56, 0x31 })]
+    public void ParseVinData_RejectsMissingDidOrWrongLength(byte[] data)
+    {
+        Assert.Throws<InvalidOperationException>(
+            () => VolvoJ2534.App.UdsClient.ParseVinData(data));
+    }
+
+    [Fact]
+    public void ParseVinData_RejectsNonAsciiVinCharacters()
+    {
+        var data = new byte[19];
+        data[0] = 0xF1;
+        data[1] = 0x90;
+        Array.Fill(data, (byte)'A', 2, 17);
+        data[8] = 0x20;
+
+        Assert.Throws<InvalidOperationException>(
+            () => VolvoJ2534.App.UdsClient.ParseVinData(data));
+    }
+
     [Fact]
     public void ParsePositiveResponse_ReturnsPayload()
     {
