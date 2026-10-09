@@ -144,7 +144,7 @@ public sealed class UdsClientTests
         var records = VolvoJ2534.App.UdsClient.ParseDtcResponse(
             new byte[]
             {
-                0x02, 0xFF,
+                0x02, 0xFF, 0x01,
                 0x12, 0x34, 0x56, 0x2A,
                 0xAB, 0xCD, 0xEF, 0x08
             });
@@ -197,7 +197,7 @@ public sealed class UdsClientTests
     public void ParseDtcResponse_AcceptsNoDtcRecords()
     {
         var records = VolvoJ2534.App.UdsClient.ParseDtcResponse(
-            new byte[] { 0x02, 0xFF });
+            new byte[] { 0x02, 0xFF, 0x01 });
 
         Assert.Empty(records);
     }
@@ -216,6 +216,6 @@ public sealed class UdsClientTests
     public void ParseDtcResponse_RejectsResponseShorterThanHeader()
     {
         Assert.Throws<InvalidOperationException>(() =>
-            VolvoJ2534.App.UdsClient.ParseDtcResponse(new byte[] { 0x02 }));
+            VolvoJ2534.App.UdsClient.ParseDtcResponse(new byte[] { 0x02, 0xFF }));
     }
 }
