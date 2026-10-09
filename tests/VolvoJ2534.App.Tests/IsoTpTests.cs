@@ -67,6 +67,32 @@ public sealed class IsoTpTests
             () => VolvoJ2534.App.IsoTp.Segment(payload));
     }
 
+    [Theory]
+    [InlineData(8)]
+    [InlineData(9)]
+    [InlineData(12)]
+    [InlineData(13)]
+    [InlineData(19)]
+    [InlineData(20)]
+    public void Reassembler_TrimsPaddingFromFinalConsecutiveFrame(int payloadLength)
+    {
+        var payload = Enumerable.Range(0, payloadLength).Select(i => (byte)(i + 1)).ToArray();
+        var frames = VolvoJ2534.App.IsoTp.Segment(payload);
+        var reassembler = new VolvoJ2534.App.IsoTpReassembler();
+        byte[]? result = null;
+
+        foreach (var bytes in frames)
+        {
+            var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, bytes, 0, 0);
+            Assert.True(reassembler.Push(can, out var completed, out var error), error);
+            if (completed is not null)
+                result = completed;
+        }
+
+        Assert.Equal(payload, result);
+        Assert.False(reassembler.InProgress);
+    }
+
     [Fact]
     public void Reassembler_RejectsSequenceMismatch()
     {
