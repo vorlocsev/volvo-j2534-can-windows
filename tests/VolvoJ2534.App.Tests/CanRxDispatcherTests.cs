@@ -143,6 +143,81 @@ public sealed class CanRxDispatcherTests
         dispatcher.Dispose();
     }
 
+
+    [Fact]
+    public void DispatcherPublishesFramesFromFakeAdapter()
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+        using var subscription = dispatcher.Subscribe();
+
+        dispatcher.Start();
+        adapter.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, new byte[] { 0x03, 0x7F, 0x22, 0x31 }));
+
+        Assert.True(subscription.TryRead(TimeSpan.FromSeconds(2), CancellationToken.None, out var frame));
+        Assert.Equal((uint)0x7E8, frame.ArbitrationId);
+        Assert.Equal(new byte[] { 0x03, 0x7F, 0x22, 0x31 }, frame.Data);
+    }
+
+    [Fact]
+    public void DispatcherReportsReadErrorAndContinuesReceiving()
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+        using var subscription = dispatcher.Subscribe();
+        using var errorSeen = new ManualResetEventSlim();
+
+        dispatcher.ReadError += _ => errorSeen.Set();
+        adapter.FailNextRead();
+        dispatcher.Start();
+
+        Assert.True(errorSeen.Wait(TimeSpan.FromSeconds(2)));
+        adapter.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, new byte[] { 0x01, 0x00 }));
+
+        Assert.True(subscription.TryRead(TimeSpan.FromSeconds(2), CancellationToken.None, out var frame));
+        Assert.Equal((uint)0x7E8, frame.ArbitrationId);
+    }
+
+    private sealed class FakeJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _frames = new();
+        private int _failNextRead;
+
+        internal void Enqueue(VolvoJ2534.App.J2534Native.PassthruMsg frame) => _frames.Enqueue(frame);
+        internal void FailNextRead() => Interlocked.Exchange(ref _failNextRead, 1);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            return true;
+        }
+        public void Unload() { }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            if (Interlocked.Exchange(ref _failNextRead, 0) != 0)
+            {
+                msg = default;
+                error = "simulated adapter read error";
+                return false;
+            }
+
+            if (_frames.TryDequeue(out msg))
+            {
+                error = string.Empty;
+                return true;
+            }
+
+            Thread.Sleep((int)Math.Min(timeout, 10));
+            msg = default;
+            error = string.Empty;
+            return false;
+        }
+    }
+
     private static VolvoJ2534.App.CanFrame Frame(uint id) =>
         new(id, false, false, new byte[] { 0x00 }, 0, 0);
 }
