@@ -54,9 +54,9 @@ internal static class IsoTp
 
             case IsoTpFrameType.FirstFrame:
             {
-                if (frame.Data.Length < 2)
+                if (frame.Data.Length < 3)
                 {
-                    error = "Invalid ISO-TP First Frame.";
+                    error = "Invalid ISO-TP First Frame: payload bytes are missing.";
                     return false;
                 }
 
@@ -74,6 +74,12 @@ internal static class IsoTp
 
             case IsoTpFrameType.ConsecutiveFrame:
             {
+                if (frame.Data.Length < 2)
+                {
+                    error = "Invalid ISO-TP Consecutive Frame: payload bytes are missing.";
+                    return false;
+                }
+
                 result = new IsoTpFrame(
                     IsoTpFrameType.ConsecutiveFrame,
                     frame.Data.Length > 1 ? frame.Data[1..] : Array.Empty<byte>(),
