@@ -39,17 +39,31 @@ internal sealed class CanRxDispatcher : IDisposable
 
             try
             {
-                // WaitToReadAsync observes the channel's own state, so a
-                // concurrent drop-oldest write cannot desynchronize a separate
-                // semaphore from the queue.
-                var readable = _channel.Reader.WaitToReadAsync(cancellationToken).AsTask();
-                if (!readable.IsCompleted && !readable.Wait(timeout, cancellationToken))
-                    return false;
+                // Another reader may consume an item after WaitToReadAsync
+                // completes but before TryRead. Loop until we get a frame or
+                // the original timeout expires; never report a false timeout
+                // while a concurrent reader merely won the race.
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                while (true)
+                {
+                    var readable = _channel.Reader.WaitToReadAsync(cancellationToken).AsTask();
+                    if (!readable.IsCompleted)
+                    {
+                        var remaining = timeout - stopwatch.Elapsed;
+                        if (remaining <= TimeSpan.Zero ||
+                            !readable.Wait(remaining, cancellationToken))
+                            return false;
+                    }
 
-                if (!readable.GetAwaiter().GetResult())
-                    return false;
+                    if (!readable.GetAwaiter().GetResult())
+                        return false;
 
-                return _channel.Reader.TryRead(out frame);
+                    if (_channel.Reader.TryRead(out frame))
+                        return true;
+
+                    if (stopwatch.Elapsed >= timeout)
+                        return false;
+                }
             }
             catch (OperationCanceledException)
             {
