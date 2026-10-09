@@ -119,7 +119,6 @@ public sealed class CanBusTests
 
     private sealed class FakeJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
     {
-        internal int WriteCount { get; private set; }
         internal VolvoJ2534.App.J2534Native.PassthruMsg LastMessage { get; private set; }
         internal bool WriteResult { get; init; } = true;
         internal string WriteError { get; init; } = string.Empty;
