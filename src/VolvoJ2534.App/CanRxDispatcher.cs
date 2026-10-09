@@ -282,6 +282,24 @@ internal sealed class CanRxDispatcher : IDisposable
 
         Stop();
 
+        // Dispose is the final lifetime barrier for the native J2534 reader.
+        // Stop() has a bounded wait for normal UI responsiveness, but unloading
+        // the adapter while ReadLoop is still inside a native call is unsafe.
+        // Keep the native session alive until that worker has actually exited.
+        Task? worker;
+        lock (_lifecycleGate)
+            worker = _worker;
+
+        try
+        {
+            worker?.GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // The worker's read errors are reported through ReadError; cleanup
+            // must still proceed after the task has definitively completed.
+        }
+
         Subscription[] subscribers;
         lock (_gate)
         {
