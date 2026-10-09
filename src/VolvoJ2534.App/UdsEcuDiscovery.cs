@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace VolvoJ2534.App;
 
 internal sealed record UdsEcuCandidate(
@@ -33,13 +35,15 @@ internal sealed class UdsEcuDiscovery
     {
         using var subscription = _bus.Subscribe();
         var observations = new Dictionary<(uint Id, bool Extended), Observation>();
-        var end = DateTime.UtcNow + duration;
+        // A monotonic clock keeps the scan duration stable if wall-clock time
+        // is adjusted while the diagnostic tool is running.
+        var elapsed = Stopwatch.StartNew();
 
-        while (DateTime.UtcNow < end)
+        while (elapsed.Elapsed < duration)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var remaining = end - DateTime.UtcNow;
+            var remaining = duration - elapsed.Elapsed;
             if (remaining <= TimeSpan.Zero)
                 break;
 
