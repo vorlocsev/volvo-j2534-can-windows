@@ -403,8 +403,9 @@ public sealed partial class MainWindow : Window
 
     private void StopMonitor()
     {
-        _cts?.Cancel();
+        var cts = _cts;
         _cts = null;
+        cts?.Cancel();
         StartButton.Content = "Start monitor";
 
         var task = _monitorTask;
@@ -414,6 +415,18 @@ public sealed partial class MainWindow : Window
         {
             try { task.Wait(TimeSpan.FromSeconds(1)); }
             catch (AggregateException) { }
+        }
+
+        if (cts is not null)
+        {
+            if (task is null || task.IsCompleted)
+                cts.Dispose();
+            else
+                _ = task.ContinueWith(
+                    _ => cts.Dispose(),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
         }
 
         if (_connected) SetStatus("Connected");
