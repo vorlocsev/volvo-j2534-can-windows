@@ -172,13 +172,13 @@ internal sealed class CanRxDispatcher : IDisposable
             if (!_j2534.Read(out var message, 250, out var error))
             {
                 if (!string.IsNullOrWhiteSpace(error))
-                    ReadError?.Invoke(new InvalidOperationException(error));
+                    ReportReadError(new InvalidOperationException(error));
                 continue;
             }
 
             if (!CanDecoder.TryDecode(message, out var frame, out error))
             {
-                ReadError?.Invoke(new InvalidOperationException("CAN decode error: " + error));
+                ReportReadError(new InvalidOperationException("CAN decode error: " + error));
                 continue;
             }
 
@@ -188,6 +188,25 @@ internal sealed class CanRxDispatcher : IDisposable
 
             foreach (var subscriber in subscribers)
                 subscriber.Publish(frame);
+        }
+    }
+
+    private void ReportReadError(Exception error)
+    {
+        var handlers = ReadError;
+        if (handlers is null)
+            return;
+
+        foreach (Action<Exception> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(error);
+            }
+            catch
+            {
+                // A UI/logging subscriber must not terminate the CAN read loop.
+            }
         }
     }
 
