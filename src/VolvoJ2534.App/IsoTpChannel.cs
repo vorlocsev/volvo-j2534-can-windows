@@ -47,6 +47,13 @@ internal sealed class IsoTpChannel : IDisposable
         {
             if (value < TimeSpan.Zero)
                 throw new ArgumentOutOfRangeException(name, "Timeout must be positive or zero to use the default.");
+
+            // Request deadlines are represented by Stopwatch timestamps. Reject
+            // values that cannot safely be converted to timestamp ticks and added
+            // to the current timestamp.
+            var maxSeconds = (double)(long.MaxValue - Stopwatch.GetTimestamp()) / Stopwatch.Frequency;
+            if (value.TotalSeconds > maxSeconds)
+                throw new ArgumentOutOfRangeException(name, "Timeout is too large to represent as a Stopwatch deadline.");
         }
     }
 
