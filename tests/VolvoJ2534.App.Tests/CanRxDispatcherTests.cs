@@ -49,8 +49,17 @@ public sealed class CanRxDispatcherTests
         Volatile.Write(ref finished, 1);
         await reader.WaitAsync(TimeSpan.FromSeconds(5));
 
-        // After the consumer drains the queue, there must be no stale signal
-        // or phantom frame left by a concurrent overflow.
+        // A fresh full-capacity batch must remain readable in order after
+        // concurrent overflow, with no stale permits or invisible queued items.
+        for (uint id = 30_000; id < 30_008; id++)
+            subscription.Publish(Frame(id));
+
+        for (uint expected = 30_000; expected < 30_008; expected++)
+        {
+            Assert.True(subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out var frame));
+            Assert.Equal(expected, frame.ArbitrationId);
+        }
+
         Assert.False(subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out _));
         Assert.All(consumed, id => Assert.InRange(id, 0u, 19_999u));
     }
