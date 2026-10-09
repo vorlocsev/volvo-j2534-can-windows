@@ -143,6 +143,46 @@ public sealed class CanRxDispatcherTests
         dispatcher.Dispose();
     }
 
+    [Fact]
+    public void DispatcherDoesNotStartSecondReaderWhilePreviousReadIsStopping()
+    {
+        using var readEntered = new ManualResetEventSlim();
+        using var allowReadToFinish = new ManualResetEventSlim();
+        var adapter = new FakeJ2534Adapter
+        {
+            ReadEntered = readEntered,
+            AllowReadToFinish = allowReadToFinish
+        };
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+
+        dispatcher.Start();
+        Assert.True(readEntered.Wait(TimeSpan.FromSeconds(2)), "Native read did not start.");
+
+        dispatcher.Stop(); // bounded wait expires while the fake native read is blocked
+        Assert.Throws<InvalidOperationException>(() => dispatcher.Start());
+        Assert.Equal(1, Volatile.Read(ref adapter.MaxConcurrentReads));
+
+        allowReadToFinish.Set();
+
+        // Wait until the original worker exits before allowing a restart.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                dispatcher.Start();
+                dispatcher.Stop();
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+                Thread.Sleep(10);
+            }
+        }
+
+        Assert.Fail("The receive worker did not exit after the blocked read was released.");
+    }
+
 
     [Fact]
     public void DispatcherPublishesFramesFromFakeAdapter()
@@ -235,6 +275,12 @@ public sealed class CanRxDispatcherTests
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _frames = new();
         private int _failNextRead;
+        private int _activeReads;
+        private int _maxConcurrentReads;
+
+        internal ManualResetEventSlim? ReadEntered { get; init; }
+        internal ManualResetEventSlim? AllowReadToFinish { get; init; }
+        internal int MaxConcurrentReads => Volatile.Read(ref _maxConcurrentReads);
 
         internal void Enqueue(VolvoJ2534.App.J2534Native.PassthruMsg frame) => _frames.Enqueue(frame);
         internal void FailNextRead() => Interlocked.Exchange(ref _failNextRead, 1);
@@ -251,7 +297,13 @@ public sealed class CanRxDispatcherTests
 
         public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
         {
-            if (Interlocked.Exchange(ref _failNextRead, 0) != 0)
+            var active = Interlocked.Increment(ref _activeReads);
+            UpdateMaxConcurrentReads(active);
+            try
+            {
+                ReadEntered?.Set();
+                AllowReadToFinish?.Wait();
+                if (Interlocked.Exchange(ref _failNextRead, 0) != 0)
             {
                 msg = default;
                 error = "simulated adapter read error";
@@ -268,6 +320,23 @@ public sealed class CanRxDispatcherTests
             msg = default;
             error = string.Empty;
             return false;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeReads);
+            }
+        }
+
+        private void UpdateMaxConcurrentReads(int active)
+        {
+            var current = Volatile.Read(ref _maxConcurrentReads);
+            while (active > current)
+            {
+                var observed = Interlocked.CompareExchange(ref _maxConcurrentReads, active, current);
+                if (observed == current)
+                    return;
+                current = observed;
+            }
         }
     }
 
