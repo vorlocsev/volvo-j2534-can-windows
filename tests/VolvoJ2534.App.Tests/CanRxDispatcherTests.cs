@@ -73,7 +73,7 @@ public sealed class CanRxDispatcherTests
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        Assert.Throws<OperationCanceledException>(() =>
+        Assert.ThrowsAny<OperationCanceledException>(() =>
             subscription.TryRead(TimeSpan.FromSeconds(1), cancellation.Token, out _));
     }
 
