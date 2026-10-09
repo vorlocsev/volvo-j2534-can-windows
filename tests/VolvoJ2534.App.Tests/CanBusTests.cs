@@ -117,6 +117,37 @@ public sealed class CanBusTests
         Assert.Equal(0, adapter.WriteCount);
     }
 
+    [Fact]
+    public async Task DisposeDuringActiveSendDoesNotBreakTransmitLockRelease()
+    {
+        using var writeEntered = new ManualResetEventSlim();
+        using var allowWriteToFinish = new ManualResetEventSlim();
+        var adapter = new FakeJ2534Adapter
+        {
+            WriteEntered = writeEntered,
+            AllowWriteToFinish = allowWriteToFinish
+        };
+        var bus = new VolvoJ2534.App.CanBus(adapter);
+
+        var sendTask = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
+            TimeSpan.FromSeconds(2), CancellationToken.None, out _));
+
+        try
+        {
+            Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(1)), "CAN write did not start.");
+            bus.Dispose();
+        }
+        finally
+        {
+            allowWriteToFinish.Set();
+        }
+
+        Assert.True(await sendTask);
+        bus.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 },
+            false, TimeSpan.FromMilliseconds(100), CancellationToken.None, out _));
+    }
+
     private sealed class FakeJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
     {
         internal VolvoJ2534.App.J2534Native.PassthruMsg LastMessage { get; private set; }
