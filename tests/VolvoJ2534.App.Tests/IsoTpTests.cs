@@ -270,6 +270,28 @@ public sealed class IsoTpTests
     }
 
     [Fact]
+    public void Reassembler_MalformedFrameResetsIncompletePayload()
+    {
+        var payload = Enumerable.Range(0, 20).Select(i => (byte)i).ToArray();
+        var frames = VolvoJ2534.App.IsoTp.Segment(payload);
+        var reassembler = new VolvoJ2534.App.IsoTpReassembler();
+
+        var first = new VolvoJ2534.App.CanFrame(0x7E8, false, false, frames[0], 0, 0);
+        Assert.True(reassembler.Push(first, out _, out var firstError), firstError);
+        Assert.True(reassembler.InProgress);
+
+        var malformed = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { 0x21 }, 0, 0);
+        Assert.False(reassembler.Push(malformed, out _, out var error));
+        Assert.Contains("Consecutive Frame", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(reassembler.InProgress);
+
+        var continuation = new VolvoJ2534.App.CanFrame(0x7E8, false, false, frames[1], 0, 0);
+        Assert.False(reassembler.Push(continuation, out _, out var continuationError));
+        Assert.Contains("without First Frame", continuationError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void CreateFlowControl_EncodesFields()
     {
         var frame = VolvoJ2534.App.IsoTp.CreateFlowControl(0, 8, 0x0A);
