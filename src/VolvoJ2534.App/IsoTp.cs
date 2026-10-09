@@ -211,7 +211,12 @@ internal sealed class IsoTpReassembler
                     return false;
                 }
 
-                _buffer.AddRange(iso.Data);
+                // Classic CAN frames are commonly padded to 8 bytes. The
+                // final Consecutive Frame may therefore contain padding beyond
+                // the payload length declared by the First Frame.
+                var remaining = _expectedLength - _buffer.Count;
+                var bytesToAppend = Math.Min(remaining, iso.Data.Length);
+                _buffer.AddRange(iso.Data.AsSpan(0, bytesToAppend).ToArray());
                 _nextSequence = (byte)((_nextSequence + 1) & 0x0F);
 
                 if (_buffer.Count >= _expectedLength)
