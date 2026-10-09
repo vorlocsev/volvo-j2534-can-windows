@@ -149,12 +149,15 @@ internal sealed class CanRxDispatcher : IDisposable
     {
         lock (_lifecycleGate)
         {
-            if (_running == 0)
+            // Stop may be called more than once. Even if the running flag was
+            // cleared by an earlier timed-out Stop(), still wait for the
+            // existing worker before allowing Dispose to tear down resources.
+            var worker = _worker;
+            var cts = _cts;
+            if (_running == 0 && (worker is null || worker.IsCompleted))
                 return;
 
             _running = 0;
-            var cts = _cts;
-            var worker = _worker;
             cts?.Cancel();
 
             try
