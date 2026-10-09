@@ -23,6 +23,39 @@ public sealed class CanRxDispatcherTests
     }
 
     [Fact]
+    public async Task Subscription_ConcurrentPublishAndRead_RemainsConsistentAfterOverflow()
+    {
+        using var j2534 = new VolvoJ2534.App.J2534Native();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
+        using var subscription = dispatcher.Subscribe(8);
+        var consumed = new System.Collections.Concurrent.ConcurrentBag<uint>();
+
+        var reader = Task.Run(() =>
+        {
+            while (!Volatile.Read(ref finished))
+            {
+                if (subscription.TryRead(TimeSpan.FromMilliseconds(1), CancellationToken.None, out var frame))
+                    consumed.Add(frame.ArbitrationId);
+            }
+
+            while (subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out var frame))
+                consumed.Add(frame.ArbitrationId);
+        });
+
+        var finished = false;
+        for (uint id = 0; id < 20_000; id++)
+            subscription.Publish(Frame(id));
+
+        Volatile.Write(ref finished, true);
+        await reader.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // After the consumer drains the queue, there must be no stale signal
+        // or phantom frame left by a concurrent overflow.
+        Assert.False(subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out _));
+        Assert.All(consumed, id => Assert.InRange(id, 0u, 19_999u));
+    }
+
+    [Fact]
     public void Subscription_TryReadHonorsCancellation()
     {
         using var j2534 = new VolvoJ2534.App.J2534Native();
