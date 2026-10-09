@@ -160,7 +160,7 @@ public sealed class CanRxDispatcherTests
 
         dispatcher.Stop(); // bounded wait expires while the fake native read is blocked
         Assert.Throws<InvalidOperationException>(() => dispatcher.Start());
-        Assert.Equal(1, Volatile.Read(ref adapter.MaxConcurrentReads));
+        Assert.Equal(1, adapter.MaxConcurrentReads);
 
         allowReadToFinish.Set();
 
@@ -271,6 +271,33 @@ public sealed class CanRxDispatcherTests
         Assert.Equal(2, Volatile.Read(ref errorCount));
     }
 
+    [Fact]
+    public async Task DispatcherDisposeWaitsForAnInFlightAdapterRead()
+    {
+        using var readEntered = new ManualResetEventSlim();
+        using var allowReadToFinish = new ManualResetEventSlim();
+        var adapter = new BlockingReadAdapter(readEntered, allowReadToFinish);
+        var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+
+        dispatcher.Start();
+        Assert.True(readEntered.Wait(TimeSpan.FromSeconds(2)), "Adapter read did not start.");
+
+        var disposeTask = Task.Run(dispatcher.Dispose);
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(1_200));
+            Assert.False(disposeTask.IsCompleted);
+        }
+        finally
+        {
+            allowReadToFinish.Set();
+        }
+
+        await disposeTask.WaitAsync(TimeSpan.FromSeconds(2));
+        dispatcher.Dispose();
+        Assert.Equal(1, adapter.ReadCount);
+    }
+
     private sealed class FakeJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _frames = new();
@@ -337,6 +364,34 @@ public sealed class CanRxDispatcherTests
                     return;
                 current = observed;
             }
+        }
+    }
+
+    private sealed class BlockingReadAdapter(
+        ManualResetEventSlim readEntered,
+        ManualResetEventSlim allowReadToFinish) : VolvoJ2534.App.IJ2534Adapter
+    {
+        private int _readCount;
+        internal int ReadCount => Volatile.Read(ref _readCount);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            return true;
+        }
+        public void Unload() { }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            Interlocked.Increment(ref _readCount);
+            readEntered.Set();
+            allowReadToFinish.Wait();
+            msg = default;
+            error = string.Empty;
+            return false;
         }
     }
 
