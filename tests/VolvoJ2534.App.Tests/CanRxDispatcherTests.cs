@@ -29,10 +29,11 @@ public sealed class CanRxDispatcherTests
         using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
         using var subscription = dispatcher.Subscribe(8);
         var consumed = new System.Collections.Concurrent.ConcurrentBag<uint>();
+        var finished = 0;
 
         var reader = Task.Run(() =>
         {
-            while (!Volatile.Read(ref finished))
+            while (Volatile.Read(ref finished) == 0)
             {
                 if (subscription.TryRead(TimeSpan.FromMilliseconds(1), CancellationToken.None, out var frame))
                     consumed.Add(frame.ArbitrationId);
@@ -42,11 +43,10 @@ public sealed class CanRxDispatcherTests
                 consumed.Add(frame.ArbitrationId);
         });
 
-        var finished = false;
         for (uint id = 0; id < 20_000; id++)
             subscription.Publish(Frame(id));
 
-        Volatile.Write(ref finished, true);
+        Volatile.Write(ref finished, 1);
         await reader.WaitAsync(TimeSpan.FromSeconds(5));
 
         // After the consumer drains the queue, there must be no stale signal
