@@ -40,6 +40,13 @@ internal sealed unsafe class J2534Native : IJ2534Adapter, IDisposable
     private PassThruWriteMsgs? _write;
     private PassThruGetLastError? _lastError;
 
+    bool IJ2534Adapter.Load(string path, out string error) => Load(path, out error);
+    bool IJ2534Adapter.Open(out string error) => Open(out error);
+    bool IJ2534Adapter.Connect(uint baudRate, out string error) => Connect(baudRate, out error);
+    bool IJ2534Adapter.Read(out PassthruMsg msg, uint timeout, out string error) => Read(out msg, timeout, out error);
+    bool IJ2534Adapter.Write(in PassthruMsg msg, uint timeout, out string error) => Write(in msg, timeout, out error);
+    void IJ2534Adapter.Unload() => Unload();
+
     internal bool Load(string path, out string error)
     {
         error = string.Empty;
