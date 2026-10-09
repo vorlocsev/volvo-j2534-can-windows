@@ -14,11 +14,34 @@ internal sealed class UdsNegativeResponseException : Exception
     internal byte NegativeResponseCode { get; }
 
     internal UdsNegativeResponseException(byte requestedService, byte negativeResponseCode)
-        : base($"ECU rejected UDS service 0x{requestedService:X2}: NRC 0x{negativeResponseCode:X2}.")
+        : base($"ECU rejected UDS service 0x{requestedService:X2}: NRC 0x{negativeResponseCode:X2} ({DescribeNegativeResponseCode(negativeResponseCode)}).")
     {
         RequestedService = requestedService;
         NegativeResponseCode = negativeResponseCode;
     }
+
+    internal static string DescribeNegativeResponseCode(byte code) => code switch
+    {
+        0x10 => "general reject",
+        0x11 => "service not supported",
+        0x12 => "subfunction not supported",
+        0x13 => "incorrect message length or invalid format",
+        0x14 => "response too long",
+        0x21 => "busy; repeat the request later",
+        0x22 => "conditions not correct",
+        0x24 => "request sequence error",
+        0x25 => "no response from subnet component",
+        0x26 => "failure prevents execution",
+        0x31 => "request out of range or unsupported data identifier",
+        0x33 => "security access denied",
+        0x35 => "invalid key",
+        0x36 => "exceeded number of attempts",
+        0x37 => "required time delay not expired",
+        0x78 => "response pending",
+        0x7E => "subfunction not supported in active session",
+        0x7F => "service not supported in active session",
+        _ => "unrecognized or manufacturer-specific negative response code"
+    };
 }
 
 internal sealed class UdsClient : IDisposable
