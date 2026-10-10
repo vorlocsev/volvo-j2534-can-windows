@@ -261,7 +261,6 @@ public sealed class CanRxDispatcherTests
     }
 
     [Fact]
-    [Fact]
     public void DispatcherReportsUnexpectedOperationCanceledExceptionAndContinuesReceiving()
     {
         var adapter = new FakeJ2534Adapter();
