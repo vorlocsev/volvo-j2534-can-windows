@@ -12,12 +12,13 @@ internal sealed class VirtualJ2534Adapter : VolvoJ2534.App.IJ2534Adapter, IDispo
     private readonly SemaphoreSlim _rxReady = new(0);
     private readonly Func<VolvoJ2534.App.CanFrame, IEnumerable<VolvoJ2534.App.CanFrame>> _onTransmit;
     private int _disposed;
+    private int _transmittedFrames;
 
     internal VirtualJ2534Adapter(
         Func<VolvoJ2534.App.CanFrame, IEnumerable<VolvoJ2534.App.CanFrame>> onTransmit)
         => _onTransmit = onTransmit ?? throw new ArgumentNullException(nameof(onTransmit));
 
-    internal int TransmittedFrames { get; private set; }
+    internal int TransmittedFrames => Volatile.Read(ref _transmittedFrames);
 
     public bool Load(string path, out string error) { error = string.Empty; return true; }
     public bool Open(out string error) { error = string.Empty; return true; }
@@ -46,7 +47,7 @@ internal sealed class VirtualJ2534Adapter : VolvoJ2534.App.IJ2534Adapter, IDispo
         if (!VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
             return false;
 
-        Interlocked.Increment(ref TransmittedFrames);
+        Interlocked.Increment(ref _transmittedFrames);
         foreach (var response in _onTransmit(frame))
         {
             _rx.Enqueue(VolvoJ2534.App.CanDecoder.Encode(
