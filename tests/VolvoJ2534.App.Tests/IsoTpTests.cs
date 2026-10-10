@@ -325,6 +325,28 @@ public sealed class IsoTpTests
         Assert.Contains("without First Frame", continuationError, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Reassembler_UnexpectedFlowControlResetsIncompletePayload()
+    {
+        var payload = Enumerable.Range(0, 20).Select(i => (byte)i).ToArray();
+        var frames = VolvoJ2534.App.IsoTp.Segment(payload);
+        var reassembler = new VolvoJ2534.App.IsoTpReassembler();
+
+        var first = new VolvoJ2534.App.CanFrame(0x7E8, false, false, frames[0], 0, 0);
+        Assert.True(reassembler.Push(first, out _, out var firstError), firstError);
+        Assert.True(reassembler.InProgress);
+
+        var unexpectedFlowControl = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { 0x30, 0x00, 0x00 }, 0, 0);
+        Assert.False(reassembler.Push(unexpectedFlowControl, out _, out var error));
+        Assert.Contains("Flow Control", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(reassembler.InProgress);
+
+        var continuation = new VolvoJ2534.App.CanFrame(0x7E8, false, false, frames[1], 0, 0);
+        Assert.False(reassembler.Push(continuation, out _, out var continuationError));
+        Assert.Contains("without First Frame", continuationError, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(3)]
     [InlineData(15)]
