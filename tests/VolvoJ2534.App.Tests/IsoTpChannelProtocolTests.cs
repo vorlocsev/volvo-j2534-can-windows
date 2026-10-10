@@ -48,11 +48,36 @@ public sealed class IsoTpChannelProtocolTests
         Assert.Equal(new byte[] { 0xF1, 0x90 }, data);
     }
 
+    [Fact]
+    public void UdsClient_RejectsTruncatedReadDataByIdentifierResponse()
+    {
+        var adapter = new UnrelatedThenMatchingDidAdapter(new byte[] { 0x02, 0x62, 0xF1 });
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(300),
+                RequestTimeout: TimeSpan.FromSeconds(1)));
+        using var client = new VolvoJ2534.App.UdsClient(channel);
+
+        var error = Assert.Throws<InvalidOperationException>(() => client.ReadDataByIdentifier(0xF190));
+
+        Assert.Contains("did not contain requested DID", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class UnrelatedThenMatchingDidAdapter : VolvoJ2534.App.IJ2534Adapter
     {
         private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
         private readonly AutoResetEvent _incomingReady = new(false);
         private int _responded;
+        private readonly byte[] _matchingResponse;
+
+        internal UnrelatedThenMatchingDidAdapter(byte[]? matchingResponse = null)
+            => _matchingResponse = matchingResponse ?? new byte[] { 0x03, 0x62, 0xF1, 0x90 };
 
         public bool Load(string path, out string error) { error = string.Empty; return true; }
         public bool Open(out string error) { error = string.Empty; return true; }
@@ -75,7 +100,7 @@ public sealed class IsoTpChannelProtocolTests
             {
                 // An unrelated DID arrives first; the matching response follows.
                 Enqueue(new byte[] { 0x03, 0x62, 0xF1, 0x91 });
-                Enqueue(new byte[] { 0x03, 0x62, 0xF1, 0x90 });
+                Enqueue(_matchingResponse);
             }
 
             return true;
