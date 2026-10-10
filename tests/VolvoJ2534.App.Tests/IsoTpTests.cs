@@ -439,6 +439,29 @@ public sealed class IsoTpTests
     }
 
     [Fact]
+    public void IsoTpChannel_RespectsFlowControlSeparationTime()
+    {
+        var adapter = new MultiFrameScenarioAdapter { SeparationTime = 0x0A };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FlowControlTimeout: TimeSpan.FromMilliseconds(300),
+                RequestTimeout: TimeSpan.FromSeconds(2)));
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var response = channel.Request(Enumerable.Range(0, 20).Select(i => (byte)i).ToArray());
+        stopwatch.Stop();
+
+        Assert.Equal(new byte[] { 0x62, 0xF1, 0x90 }, response);
+        Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(15),
+            $"Expected two 10 ms STmin delays, elapsed {stopwatch.Elapsed}.");
+    }
+
+    [Fact]
     public void IsoTpChannel_SendsMultiFrameRequestAfterFlowControl()
     {
         var adapter = new MultiFrameScenarioAdapter();
@@ -474,6 +497,7 @@ public sealed class IsoTpTests
 
         internal VolvoJ2534.App.CanFrame[] SentFrames => _sentFrames.ToArray();
         internal int WaitFlowControlFrames { get; init; }
+        internal byte SeparationTime { get; init; }
 
         public bool Load(string path, out string error) { error = string.Empty; return true; }
         public bool Open(out string error) { error = string.Empty; return true; }
@@ -501,11 +525,11 @@ public sealed class IsoTpTests
                 {
                     for (var i = 0; i < WaitFlowControlFrames; i++)
                         Enqueue(0x7E8, new byte[] { 0x31, 0x00, 0x00 });
-                    Enqueue(0x7E8, new byte[] { 0x30, 0x00, 0x00 });
+                    Enqueue(0x7E8, new byte[] { 0x30, 0x00, SeparationTime });
                 }
                 else if (_sentFrames.Count is 1 or 2 or 3)
                 {
-                    Enqueue(0x7E8, new byte[] { 0x30, 0x01, 0x00 });
+                    Enqueue(0x7E8, new byte[] { 0x30, 0x01, SeparationTime });
                 }
                 else if (_sentFrames.Count == 4)
                 {
