@@ -37,6 +37,15 @@ internal static class IsoTp
             return false;
         }
 
+        // This implementation uses Classic CAN, whose data field is at most
+        // eight bytes. CanFrame can also be constructed directly by callers,
+        // so do not rely solely on the J2534 decoder to enforce this limit.
+        if (frame.Data.Length > 8)
+        {
+            error = "Classic CAN frame payload exceeds 8 bytes.";
+            return false;
+        }
+
         var pci = (byte)(frame.Data[0] >> 4);
         switch ((IsoTpFrameType)pci)
         {
