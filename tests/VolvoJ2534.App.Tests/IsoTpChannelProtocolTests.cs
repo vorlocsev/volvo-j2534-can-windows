@@ -1215,4 +1215,80 @@ public sealed class IsoTpChannelProtocolTests
         public void Unload() { }
     }
 
+
+    [Fact]
+    public void UdsClient_LateResponseForTimedOutDidDoesNotPoisonNextRequest()
+    {
+        var adapter = new LateDidResponseAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(100),
+                RequestTimeout: TimeSpan.FromMilliseconds(300)));
+        using var client = new VolvoJ2534.App.UdsClient(channel);
+
+        Assert.Throws<TimeoutException>(() => client.ReadDataByIdentifier(0xF190));
+
+        var response = client.ReadDataByIdentifier(0xF191);
+
+        Assert.Equal(new byte[] { 0xF1, 0x91, 0x42 }, response);
+        Assert.Equal(2, adapter.RequestCount);
+    }
+
+    private sealed class LateDidResponseAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private int _requestCount;
+
+        internal int RequestCount => Volatile.Read(ref _requestCount);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (_incoming.TryDequeue(out msg))
+                return true;
+
+            _incomingReady.WaitOne(TimeSpan.FromMilliseconds(timeout));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (!VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
+                return false;
+
+            if ((frame.Data[0] >> 4) != 0)
+                return true;
+
+            if (Interlocked.Increment(ref _requestCount) == 2)
+            {
+                // A delayed response to the previous DID arrives before the
+                // valid response to this request. UDS correlation must discard it.
+                Enqueue(new byte[] { 0x04, 0x62, 0xF1, 0x90, 0x11 });
+                Enqueue(new byte[] { 0x04, 0x62, 0xF1, 0x91, 0x42 });
+            }
+
+            return true;
+        }
+
+        private void Enqueue(byte[] data)
+        {
+            _incoming.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, data));
+            _incomingReady.Set();
+        }
+
+        public void Unload() { }
+    }
+
 }
