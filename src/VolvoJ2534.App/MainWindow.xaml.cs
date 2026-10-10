@@ -223,15 +223,13 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        var requestIsExtended = requestId > 0x7FF;
-        var responseIsExtended = responseId > 0x7FF;
-        if (requestIsExtended != responseIsExtended)
+        if (!CanDecoder.HaveSameNumericCanIdWidth(requestId, responseId))
         {
             error = "Request and response CAN IDs must both use 11-bit or both use 29-bit addressing.";
             return false;
         }
 
-        var canExtendedId = requestIsExtended;
+        var canExtendedId = requestId > 0x7FF;
 
         try
         {
