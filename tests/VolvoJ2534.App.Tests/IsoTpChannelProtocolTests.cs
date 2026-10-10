@@ -69,6 +69,73 @@ public sealed class IsoTpChannelProtocolTests
         Assert.Contains("did not contain requested DID", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Request_CancellationWhileWaitingForChannelGateIsHonored()
+    {
+        using var writeEntered = new ManualResetEventSlim();
+        using var allowWriteToFinish = new ManualResetEventSlim();
+        var adapter = new BlockingWriteAdapter(writeEntered, allowWriteToFinish);
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(100),
+                RequestTimeout: TimeSpan.FromMilliseconds(500)));
+
+        var firstRequest = Task.Run(() =>
+            Assert.ThrowsAny<Exception>(() => channel.Request(new byte[] { 0x22, 0xF1, 0x90 })));
+
+        Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(2)), "First request did not enter the adapter write.");
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x91 }, cancellation.Token));
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromMilliseconds(300),
+            "Cancellation while waiting for the channel gate took too long.");
+
+        allowWriteToFinish.Set();
+        await firstRequest.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    private sealed class BlockingWriteAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ManualResetEventSlim _writeEntered;
+        private readonly ManualResetEventSlim _allowWriteToFinish;
+
+        internal BlockingWriteAdapter(ManualResetEventSlim writeEntered, ManualResetEventSlim allowWriteToFinish)
+        {
+            _writeEntered = writeEntered;
+            _allowWriteToFinish = allowWriteToFinish;
+        }
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            msg = default;
+            Thread.Sleep((int)Math.Min(timeout, 5));
+            return false;
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            _writeEntered.Set();
+            _allowWriteToFinish.Wait();
+            return true;
+        }
+
+        public void Unload() { }
+    }
+
     private sealed class UnrelatedThenMatchingDidAdapter : VolvoJ2534.App.IJ2534Adapter
     {
         private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
