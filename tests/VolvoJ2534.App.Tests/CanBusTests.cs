@@ -45,6 +45,41 @@ public sealed class CanBusTests
         Assert.Equal(0, adapter.WriteCount);
     }
 
+    [Theory]
+    [InlineData(0x800u, false)]
+    [InlineData(0x20000000u, true)]
+    public void SendRejectsOutOfRangeCanIdentifierWithoutWriting(uint arbitrationId, bool extended)
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => bus.Send(
+            arbitrationId,
+            new byte[] { 0x01 },
+            extended,
+            TimeSpan.FromMilliseconds(100),
+            CancellationToken.None,
+            out _));
+
+        Assert.Equal(0, adapter.WriteCount);
+    }
+
+    [Theory]
+    [InlineData(0x7FFu, false)]
+    [InlineData(0x1FFFFFFFu, true)]
+    public void SendAcceptsMaximumCanIdentifier(uint arbitrationId, bool extended)
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+
+        Assert.True(bus.Send(arbitrationId, new byte[] { 0x01 }, extended,
+            TimeSpan.FromMilliseconds(100), CancellationToken.None, out var error));
+
+        Assert.Equal(string.Empty, error);
+        Assert.Equal(1, adapter.WriteCount);
+        Assert.Equal(extended ? VolvoJ2534.App.CanDecoder.Can29BitId : 0u, adapter.LastMessage.TxFlags);
+    }
+
     [Fact]
     public void SendPropagatesAdapterFailureAndError()
     {
