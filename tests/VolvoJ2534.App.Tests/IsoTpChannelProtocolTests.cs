@@ -1187,7 +1187,14 @@ public sealed class IsoTpChannelProtocolTests
             if (!VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
                 return false;
 
-            if ((frame.Data[0] >> 4) != 1)
+            var frameType = frame.Data[0] >> 4;
+            if (frameType == 2)
+            {
+                Interlocked.Increment(ref _consecutiveFramesSent);
+                return true;
+            }
+
+            if (frameType != 1)
                 return true;
 
             switch (_mode)
