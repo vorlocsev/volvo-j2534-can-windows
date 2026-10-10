@@ -1,3 +1,5 @@
+[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+
 namespace VolvoJ2534.App.Tests;
 
 public sealed class IsoTpTests
