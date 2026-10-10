@@ -87,18 +87,25 @@ public sealed class IsoTpChannelProtocolTests
                 RequestTimeout: TimeSpan.FromMilliseconds(500)));
 
         var firstRequest = Task.Run(() =>
-            Assert.ThrowsAny<Exception>(() => channel.Request(new byte[] { 0x22, 0xF1, 0x90 })));
+            Assert.Throws<TimeoutException>(() => channel.Request(new byte[] { 0x22, 0xF1, 0x90 })));
 
-        Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(2)), "First request did not enter the adapter write.");
+        try
+        {
+            Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(2)), "First request did not enter the adapter write.");
 
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        Assert.ThrowsAny<OperationCanceledException>(() =>
-            channel.Request(new byte[] { 0x22, 0xF1, 0x91 }, cancellation.Token));
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromMilliseconds(300),
-            "Cancellation while waiting for the channel gate took too long.");
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            Assert.ThrowsAny<OperationCanceledException>(() =>
+                channel.Request(new byte[] { 0x22, 0xF1, 0x91 }, cancellation.Token));
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromMilliseconds(300),
+                "Cancellation while waiting for the channel gate took too long.");
+        }
+        finally
+        {
+            // Never leave the first request blocked if an assertion fails.
+            allowWriteToFinish.Set();
+        }
 
-        allowWriteToFinish.Set();
         await firstRequest.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
