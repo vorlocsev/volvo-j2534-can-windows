@@ -727,8 +727,8 @@ public sealed class IsoTpTests
     }
 
     [Theory]
-    [InlineData(new byte[] { 0x10, 0x00, 0xAA })]
-    [InlineData(new byte[] { 0x10, 0x07, 0xAA, 0xBB, 0xCC })]
+    [InlineData(new byte[] { 0x10, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF })]
+    [InlineData(new byte[] { 0x10, 0x07, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF })]
     public void TryDecode_RejectsFirstFrameWithDeclaredLengthBelowMinimum(byte[] data)
     {
         var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, data, 0, 0);
@@ -749,7 +749,7 @@ public sealed class IsoTpTests
         Assert.True(reassembler.InProgress);
 
         var malformedFirst = new VolvoJ2534.App.CanFrame(
-            0x7E8, false, false, new byte[] { 0x10, 0x07, 0x62, 0xF1, 0x90 }, 0, 0);
+            0x7E8, false, false, new byte[] { 0x10, 0x07, 0x62, 0xF1, 0x90, 0x01, 0x02, 0x03 }, 0, 0);
         Assert.False(reassembler.Push(malformedFirst, out _, out var error));
         Assert.Contains("payload length", error, StringComparison.OrdinalIgnoreCase);
         Assert.False(reassembler.InProgress);
