@@ -236,10 +236,20 @@ internal sealed class IsoTpReassembler
                     return false;
                 }
 
-                // Classic CAN frames are commonly padded to 8 bytes. The
-                // final Consecutive Frame may therefore contain padding beyond
-                // the payload length declared by the First Frame.
+                // Every non-final Consecutive Frame must carry all 7 data
+                // bytes; the final frame must carry at least the remaining
+                // payload bytes. Padding is permitted only beyond that minimum.
+                // Accepting a short frame here would shift subsequent bytes and
+                // silently return a corrupted payload.
                 var remaining = _expectedLength - _buffer.Count;
+                var requiredBytes = Math.Min(7, remaining);
+                if (iso.Data.Length < requiredBytes)
+                {
+                    error = $"ISO-TP Consecutive Frame is too short: expected at least {requiredBytes} data bytes, got {iso.Data.Length}.";
+                    Reset();
+                    return false;
+                }
+
                 var bytesToAppend = Math.Min(remaining, iso.Data.Length);
                 _buffer.AddRange(iso.Data.AsSpan(0, bytesToAppend).ToArray());
                 _nextSequence = (byte)((_nextSequence + 1) & 0x0F);
