@@ -254,6 +254,11 @@ internal sealed class IsoTpChannel : IDisposable
                 case IsoTpFrameType.FlowControl:
                     continue;
 
+                case IsoTpFrameType.ConsecutiveFrame:
+                    // A CF without a first frame belongs to no active message.
+                    // Ignore it: it may be a late fragment from a timed-out exchange.
+                    continue;
+
                 default:
                     throw new InvalidOperationException("Unexpected ISO-TP frame type.");
             }
