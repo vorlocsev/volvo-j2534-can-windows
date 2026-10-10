@@ -25,16 +25,20 @@
 
         <Grid Grid.Row="2" ColumnSpacing="10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="120"/><ColumnDefinition Width="120"/><ColumnDefinition Width="130"/>
-                <ColumnDefinition Width="120"/><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/><ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="110"/><ColumnDefinition Width="110"/><ColumnDefinition Width="120"/>
+                <ColumnDefinition Width="110"/><ColumnDefinition Width="110"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="UdsRequestId" Header="UDS request ID" Text="7E0" PlaceholderText="e.g. 7E0"/>
             <TextBox x:Name="UdsResponseId" Grid.Column="1" Header="UDS response ID" Text="7E8" PlaceholderText="e.g. 7E8"/>
-            <TextBox x:Name="UdsDid" Grid.Column="2" Header="DID (hex)" Text="F190" PlaceholderText="e.g. F190"/>
-            <Button Grid.Column="3" Content="Read DID" Click="ReadDid_Click" VerticalAlignment="Bottom" x:Name="ReadDidButton" IsEnabled="False"/>
-            <Button x:Name="ReadVinButton" Grid.Column="4" Content="Read VIN" IsEnabled="False" Click="ReadVin_Click" VerticalAlignment="Bottom"/>
-            <Button x:Name="ReadDtcButton" Grid.Column="5" Content="Read DTC (status FF)" IsEnabled="False" Click="ReadDtc_Click" VerticalAlignment="Bottom"/>
-            <Button x:Name="CancelUdsButton" Grid.Column="6" Content="Cancel UDS" IsEnabled="False" Click="CancelUds_Click" VerticalAlignment="Bottom"/>
+            <ComboBox x:Name="CanIdFormat" Grid.Column="2" Header="CAN ID format" SelectedIndex="0">
+                <ComboBoxItem Content="11-bit" Tag="standard"/>
+                <ComboBoxItem Content="29-bit" Tag="extended"/>
+            </ComboBox>
+            <TextBox x:Name="UdsDid" Grid.Column="3" Header="DID (hex)" Text="F190" PlaceholderText="e.g. F190"/>
+            <Button Grid.Column="4" Content="Read DID" Click="ReadDid_Click" VerticalAlignment="Bottom" x:Name="ReadDidButton" IsEnabled="False"/>
+            <Button x:Name="ReadVinButton" Grid.Column="5" Content="Read VIN" IsEnabled="False" Click="ReadVin_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="ReadDtcButton" Grid.Column="6" Content="Read DTC" IsEnabled="False" Click="ReadDtc_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="CancelUdsButton" Grid.Column="7" Content="Cancel UDS" IsEnabled="False" Click="CancelUds_Click" VerticalAlignment="Bottom"/>
         </Grid>
 
         <Grid Grid.Row="3" RowSpacing="10">
