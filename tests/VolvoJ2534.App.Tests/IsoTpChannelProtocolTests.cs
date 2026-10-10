@@ -53,6 +53,34 @@ public sealed class IsoTpChannelProtocolTests
     }
 
     [Fact]
+    public void Request_CancellationDuringMultiFrameResponseAllowsNextTransaction()
+    {
+        var adapter = new CanceledMultiFrameResponseAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(500),
+                ConsecutiveFrameTimeout: TimeSpan.FromSeconds(1),
+                RequestTimeout: TimeSpan.FromSeconds(2)));
+
+        using (var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(150)))
+        {
+            Assert.ThrowsAny<OperationCanceledException>(() =>
+                channel.Request(new byte[] { 0x22, 0xF1, 0x90 }, cancellation.Token));
+        }
+
+        var response = channel.Request(new byte[] { 0x22, 0xF1, 0x91 });
+
+        Assert.Equal(new byte[] { 0x62, 0xF1, 0x91 }, response);
+        Assert.Equal(2, adapter.RequestCount);
+    }
+
+    [Fact]
     public void UdsClient_IgnoresResponseForDifferentDidAndAcceptsMatchingResponse()
     {
         var adapter = new UnrelatedThenMatchingDidAdapter();
@@ -312,6 +340,59 @@ public sealed class IsoTpChannelProtocolTests
                 // A late CF from the previous exchange arrives before the valid SF.
                 Enqueue(new byte[] { 0x21, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A });
                 Enqueue(new byte[] { 0x03, 0x62, 0xF1, 0x91 });
+            }
+
+            return true;
+        }
+
+        private void Enqueue(byte[] data)
+        {
+            _incoming.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, data));
+            _incomingReady.Set();
+        }
+
+        public void Unload() { }
+    }
+
+    private sealed class CanceledMultiFrameResponseAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private int _requestCount;
+
+        internal int RequestCount => Volatile.Read(ref _requestCount);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (_incoming.TryDequeue(out msg))
+                return true;
+
+            _incomingReady.WaitOne(TimeSpan.FromMilliseconds(timeout));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (!VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
+                return false;
+
+            // Flow Control is not a new diagnostic request.
+            if ((frame.Data[0] >> 4) == 3)
+                return true;
+
+            if ((frame.Data[0] >> 4) == 0)
+            {
+                var requestNumber = Interlocked.Increment(ref _requestCount);
+                if (requestNumber == 1)
+                    Enqueue(new byte[] { 0x10, 0x08, 0x62, 0xF1, 0x90, 0x41, 0x42, 0x43 });
+                else
+                    Enqueue(new byte[] { 0x03, 0x62, 0xF1, 0x91 });
             }
 
             return true;
