@@ -302,4 +302,48 @@ public sealed class VirtualJ2534AdapterTests
         Assert.Equal(new byte[] { 0x62, 0xF1, 0x91, 0x6E }, responses[1]);
         Assert.Equal(2, adapter.TransmittedFrames);
     }
+
+    [Fact]
+    public void VirtualAdapter_UdsClientWaitsForFinalResponseAfterResponsePending()
+    {
+        using var adapter = new VirtualJ2534Adapter(request =>
+        {
+            if (request.ArbitrationId != 0x7E0 ||
+                request.Data.Length < 4 ||
+                request.Data[1] != 0x22 ||
+                request.Data[2] != 0xF1 ||
+                request.Data[3] != 0x90)
+                return Array.Empty<VolvoJ2534.App.CanFrame>();
+
+            // UDS NRC 0x78 tells the client that the response is pending;
+            // it must continue waiting for the final positive response.
+            return new[]
+            {
+                new VolvoJ2534.App.CanFrame(
+                    0x7E8, false, false,
+                    new byte[] { 0x03, 0x7F, 0x22, 0x78 },
+                    0, 0),
+                new VolvoJ2534.App.CanFrame(
+                    0x7E8, false, false,
+                    new byte[] { 0x04, 0x62, 0xF1, 0x90, 0x42 },
+                    0, 0)
+            };
+        });
+
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+        var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(500),
+                RequestTimeout: TimeSpan.FromSeconds(2)));
+        using var client = new VolvoJ2534.App.UdsClient(channel);
+
+        var response = client.ReadDataByIdentifier(0xF190);
+
+        Assert.Equal(new byte[] { 0xF1, 0x90, 0x42 }, response);
+        Assert.Equal(1, adapter.TransmittedFrames);
+    }
+
 }
