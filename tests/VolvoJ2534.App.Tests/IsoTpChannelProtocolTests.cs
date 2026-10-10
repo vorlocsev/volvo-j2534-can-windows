@@ -71,6 +71,30 @@ public sealed class IsoTpChannelProtocolTests
     }
 
     [Fact]
+    public void UdsClient_PendingThenNegativeResponseReportsFinalNrc()
+    {
+        var adapter = new PendingThenNegativeResponseAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(300),
+                RequestTimeout: TimeSpan.FromSeconds(1)));
+        using var client = new VolvoJ2534.App.UdsClient(channel);
+
+        var error = Assert.Throws<VolvoJ2534.App.UdsNegativeResponseException>(
+            () => client.ReadDataByIdentifier(0xF190));
+
+        Assert.Equal((byte)0x22, error.RequestedService);
+        Assert.Equal((byte)0x31, error.NegativeResponseCode);
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
+    [Fact]
     public void UdsClient_RepeatedResponsePendingDoesNotExtendOverallRequestTimeout()
     {
         var adapter = new RepeatedPendingResponseAdapter();
@@ -219,6 +243,51 @@ public sealed class IsoTpChannelProtocolTests
 
         await firstRequest.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(1, adapter.WriteCount);
+    }
+
+    private sealed class PendingThenNegativeResponseAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private int _responded;
+        private int _writeCount;
+
+        internal int WriteCount => Volatile.Read(ref _writeCount);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (_incoming.TryDequeue(out msg))
+                return true;
+
+            _incomingReady.WaitOne(TimeSpan.FromMilliseconds(timeout));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            Interlocked.Increment(ref _writeCount);
+            if (Interlocked.Exchange(ref _responded, 1) == 0)
+            {
+                Enqueue(new byte[] { 0x03, 0x7F, 0x22, 0x78 });
+                Enqueue(new byte[] { 0x03, 0x7F, 0x22, 0x31 });
+            }
+
+            return true;
+        }
+
+        private void Enqueue(byte[] data)
+        {
+            _incoming.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, data));
+            _incomingReady.Set();
+        }
+
+        public void Unload() { }
     }
 
     private sealed class RepeatedPendingResponseAdapter : VolvoJ2534.App.IJ2534Adapter
