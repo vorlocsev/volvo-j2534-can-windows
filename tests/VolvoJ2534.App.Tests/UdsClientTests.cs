@@ -245,7 +245,6 @@ public sealed class UdsClientTests
             new byte[] { 0xF1, 0x90 },
             new byte[] { 0x7F, 0x19, 0x31 }));
     }
-}
 
     [Fact]
     public void IsUnrelatedResponse_IgnoresPositiveDtcResponseForDifferentSubfunction()
@@ -273,3 +272,4 @@ public sealed class UdsClientTests
             new byte[] { 0xF1, 0x90 },
             new byte[] { 0x7F, 0x22, 0x31 }));
     }
+}
