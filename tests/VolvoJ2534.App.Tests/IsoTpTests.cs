@@ -246,6 +246,18 @@ public sealed class IsoTpTests
     }
 
     [Theory]
+    [InlineData(new byte[] { 0x00 })]
+    [InlineData(new byte[] { 0x08, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77 })]
+    [InlineData(new byte[] { 0x05, 0x11, 0x22 })]
+    public void TryDecode_RejectsInvalidSingleFrameLength(byte[] data)
+    {
+        var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, data, 0, 0);
+
+        Assert.False(VolvoJ2534.App.IsoTp.TryDecode(can, out _, out var error));
+        Assert.Contains("Single Frame length", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData(new byte[] { 0x10, 0x08 })]
     [InlineData(new byte[] { 0x10 })]
     public void TryDecode_RejectsFirstFrameWithoutPayload(byte[] data)
