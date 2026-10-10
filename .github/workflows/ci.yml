@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Verify .NET SDK
+        run: dotnet --version
+
+      - name: Restore
+        run: dotnet restore VolvoJ2534.sln
+
+      - name: Build
+        run: dotnet build VolvoJ2534.sln --configuration Release --no-restore -p:Platform=x86
+
+      - name: Test
+        run: dotnet test tests/VolvoJ2534.App.Tests/VolvoJ2534.App.Tests.csproj --configuration Release --no-build -p:Platform=x86 --logger "trx;LogFileName=test-results.trx"
+
+      - name: Publish
+        run: dotnet publish src/VolvoJ2534.App/VolvoJ2534.App.csproj --configuration Release --no-restore --self-contained true --runtime win-x86 -p:Platform=x86 --output artifacts/app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: VolvoJ2534-Windows-x86
+          path: artifacts/app

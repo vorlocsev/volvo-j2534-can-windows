@@ -6,11 +6,13 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
     <Grid Padding="20" RowSpacing="14">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
         <StackPanel Spacing="4">
             <TextBlock Text="Volvo J2534 CAN Monitor" FontSize="28" FontWeight="SemiBold"/>
             <TextBlock Text="Windows 11 · WinUI 3 · x86 only · read-only diagnostics" Opacity="0.65"/>
         </StackPanel>
+
         <Grid Grid.Row="1" ColumnSpacing="10">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
             <TextBox x:Name="DllPath" PlaceholderText="Path to 32-bit J2534 DLL" Header="J2534 DLL"/>
@@ -20,7 +22,45 @@
             <Button x:Name="ConnectButton" Grid.Column="2" Content="Connect" Click="Connect_Click" VerticalAlignment="Bottom"/>
             <Button x:Name="StartButton" Grid.Column="3" Content="Start monitor" Click="Start_Click" VerticalAlignment="Bottom" IsEnabled="False"/>
         </Grid>
-        <Grid Grid.Row="2">
+
+        <Grid Grid.Row="2" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="110"/><ColumnDefinition Width="110"/><ColumnDefinition Width="120"/>
+                <ColumnDefinition Width="110"/><ColumnDefinition Width="110"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="UdsRequestId" Header="UDS request ID" Text="7E0" PlaceholderText="e.g. 7E0"/>
+            <TextBox x:Name="UdsResponseId" Grid.Column="1" Header="UDS response ID" Text="7E8" PlaceholderText="e.g. 7E8"/>
+            <ComboBox x:Name="CanIdFormat" Grid.Column="2" Header="CAN ID format" SelectedIndex="0">
+                <ComboBoxItem Content="11-bit" Tag="standard"/>
+                <ComboBoxItem Content="29-bit" Tag="extended"/>
+            </ComboBox>
+            <TextBox x:Name="UdsDid" Grid.Column="3" Header="DID (hex)" Text="F190" PlaceholderText="e.g. F190"/>
+            <Button Grid.Column="4" Content="Read DID" Click="ReadDid_Click" VerticalAlignment="Bottom" x:Name="ReadDidButton" IsEnabled="False"/>
+            <Button x:Name="ReadVinButton" Grid.Column="5" Content="Read VIN" IsEnabled="False" Click="ReadVin_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="ReadDtcButton" Grid.Column="6" Content="Read DTC" IsEnabled="False" Click="ReadDtc_Click" VerticalAlignment="Bottom"/>
+            <Button x:Name="CancelUdsButton" Grid.Column="7" Content="Cancel UDS" IsEnabled="False" Click="CancelUds_Click" VerticalAlignment="Bottom"/>
+        </Grid>
+
+        <Grid Grid.Row="3" RowSpacing="10">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid Grid.Row="0" ColumnSpacing="10">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Button x:Name="DiscoverButton" Content="Discover ECUs" Click="Discover_Click" IsEnabled="False"/>
+                <ComboBox x:Name="EcuSelector" Grid.Column="1" PlaceholderText="Select ECU" SelectionChanged="EcuSelector_SelectionChanged"/>
+                <TextBlock x:Name="DiscoveryStatus" Grid.Column="2" VerticalAlignment="Center" Text="Not scanned"/>
+                <Button x:Name="CancelDiscoveryButton" Grid.Column="3" Content="Cancel scan" Click="CancelDiscovery_Click" IsEnabled="False"/>
+            </Grid>
+            <ListView x:Name="EcusView" Grid.Row="1" Height="100" SelectionMode="Single" SelectionChanged="Ecu_SelectionChanged">
+                <ListView.Header><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="100"/><ColumnDefinition Width="90"/><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Response"/><TextBlock Grid.Column="1" Text="Request"/><TextBlock Grid.Column="2" Text="Type"/><TextBlock Grid.Column="3" Text="Frames"/><TextBlock Grid.Column="4" Text="Max payload"/></Grid></ListView.Header>
+                <ListView.ItemTemplate><DataTemplate><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="100"/><ColumnDefinition Width="90"/><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Response}"/><TextBlock Grid.Column="1" Text="{Binding Request}"/><TextBlock Grid.Column="2" Text="{Binding Type}"/><TextBlock Grid.Column="3" Text="{Binding Frames}"/><TextBlock Grid.Column="4" Text="{Binding MaxPayload}"/></Grid></DataTemplate></ListView.ItemTemplate>
+            </ListView>
+            <Border Grid.Row="2" Padding="10" Margin="0,10,0,10" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Selected ECU" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="EcuInfoText" Text="No ECU selected" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+            <Grid Grid.Row="3">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid ColumnSpacing="10" Margin="0,0,0,10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="120"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
@@ -31,10 +71,14 @@
                 <TextBlock x:Name="FrameCountText" Grid.Column="4" VerticalAlignment="Center" Text="0 frames" HorizontalAlignment="Right"/>
             </Grid>
             <ListView x:Name="FramesView" Grid.Row="1" SelectionMode="None">
-                <ListView.Header><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Timestamp (ms)"/><TextBlock Grid.Column="1" Text="ID"/><TextBlock Grid.Column="2" Text="DLC"/><TextBlock Grid.Column="3" Text="Data"/></Grid></ListView.Header>
-                <ListView.ItemTemplate><DataTemplate><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Timestamp}"/><TextBlock Grid.Column="1" Text="{Binding Id}" FontFamily="Consolas"/><TextBlock Grid.Column="2" Text="{Binding Dlc}"/><TextBlock Grid.Column="3" Text="{Binding Data}" FontFamily="Consolas"/></Grid></DataTemplate></ListView.ItemTemplate>
+                <ListView.Header><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="80"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Timestamp (ms)"/><TextBlock Grid.Column="1" Text="ID"/><TextBlock Grid.Column="2" Text="Type"/><TextBlock Grid.Column="3" Text="DLC"/><TextBlock Grid.Column="4" Text="Data"/></Grid></ListView.Header>
+                <ListView.ItemTemplate><DataTemplate><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/><ColumnDefinition Width="80"/><ColumnDefinition Width="55"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Timestamp}"/><TextBlock Grid.Column="1" Text="{Binding Id}" FontFamily="Consolas"/><TextBlock Grid.Column="2" Text="{Binding Type}"/><TextBlock Grid.Column="3" Text="{Binding Dlc}"/><TextBlock Grid.Column="4" Text="{Binding Data}" FontFamily="Consolas"/></Grid></DataTemplate></ListView.ItemTemplate>
             </ListView>
+            </Grid>
         </Grid>
-        <Border Grid.Row="3" Padding="10" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"><TextBlock x:Name="StatusText" Text="Disconnected"/></Border>
+
+        <Border Grid.Row="4" Padding="10" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <TextBlock x:Name="StatusText" Text="Disconnected"/>
+        </Border>
     </Grid>
 </Window>
