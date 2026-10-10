@@ -857,4 +857,88 @@ public sealed class IsoTpChannelProtocolTests
         public void Unload() { }
     }
 
+
+
+    [Fact]
+    public void Request_TimeoutBetweenConsecutiveFramesAllowsNextTransaction()
+    {
+        var adapter = new ConsecutiveFrameTimeoutAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(300),
+                ConsecutiveFrameTimeout: TimeSpan.FromMilliseconds(120),
+                RequestTimeout: TimeSpan.FromMilliseconds(900)));
+
+        Assert.Throws<TimeoutException>(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x90 }));
+
+        var response = channel.Request(new byte[] { 0x22, 0xF1, 0x91 });
+
+        Assert.Equal(new byte[] { 0x62, 0xF1, 0x91 }, response);
+        Assert.Equal(2, adapter.RequestCount);
+    }
+
+    private sealed class ConsecutiveFrameTimeoutAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private int _requestCount;
+
+        internal int RequestCount => Volatile.Read(ref _requestCount);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (_incoming.TryDequeue(out msg))
+                return true;
+
+            _incomingReady.WaitOne(TimeSpan.FromMilliseconds(timeout));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (!VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
+                return false;
+
+            if ((frame.Data[0] >> 4) == 3)
+            {
+                // Send one valid CF, then stall so the inter-CF timer expires.
+                Enqueue(new byte[] { 0x21, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47 });
+            }
+            else if ((frame.Data[0] >> 4) == 0)
+            {
+                if (Interlocked.Increment(ref _requestCount) == 1)
+                    Enqueue(new byte[] { 0x10, 0x14, 0x62, 0xF1, 0x90, 0x01, 0x02, 0x03 });
+                else
+                {
+                    // The old exchange's next CF arrives late before the new SF.
+                    Enqueue(new byte[] { 0x22, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E });
+                    Enqueue(new byte[] { 0x03, 0x62, 0xF1, 0x91 });
+                }
+            }
+
+            return true;
+        }
+
+        private void Enqueue(byte[] data)
+        {
+            _incoming.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, data));
+            _incomingReady.Set();
+        }
+
+        public void Unload() { }
+    }
+
 }
