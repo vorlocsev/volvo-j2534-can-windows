@@ -417,6 +417,28 @@ public sealed class IsoTpTests
     }
 
     [Fact]
+    public void IsoTpChannel_StopsAfterConfiguredFlowControlWaitLimit()
+    {
+        var adapter = new MultiFrameScenarioAdapter { WaitFlowControlFrames = 3 };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FlowControlTimeout: TimeSpan.FromMilliseconds(300),
+                RequestTimeout: TimeSpan.FromSeconds(2),
+                MaxWaitFlowControls: 2));
+
+        var error = Assert.Throws<TimeoutException>(() =>
+            channel.Request(Enumerable.Range(0, 20).Select(i => (byte)i).ToArray()));
+
+        Assert.Contains("WAIT limit exceeded", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(adapter.SentFrames);
+    }
+
+    [Fact]
     public void IsoTpChannel_SendsMultiFrameRequestAfterFlowControl()
     {
         var adapter = new MultiFrameScenarioAdapter();
@@ -451,6 +473,7 @@ public sealed class IsoTpTests
         private readonly AutoResetEvent _incomingReady = new(false);
 
         internal VolvoJ2534.App.CanFrame[] SentFrames => _sentFrames.ToArray();
+        internal int WaitFlowControlFrames { get; init; }
 
         public bool Load(string path, out string error) { error = string.Empty; return true; }
         public bool Open(out string error) { error = string.Empty; return true; }
@@ -474,10 +497,20 @@ public sealed class IsoTpTests
                 _sentFrames.Enqueue(frame);
                 // Block Size=1 means the sender must request another FC
                 // after each CF while more payload remains.
-                if (_sentFrames.Count is 1 or 2 or 3)
+                if (_sentFrames.Count == 1 && WaitFlowControlFrames > 0)
+                {
+                    for (var i = 0; i < WaitFlowControlFrames; i++)
+                        Enqueue(0x7E8, new byte[] { 0x31, 0x00, 0x00 });
+                    Enqueue(0x7E8, new byte[] { 0x30, 0x00, 0x00 });
+                }
+                else if (_sentFrames.Count is 1 or 2 or 3)
+                {
                     Enqueue(0x7E8, new byte[] { 0x30, 0x01, 0x00 });
+                }
                 else if (_sentFrames.Count == 4)
+                {
                     Enqueue(0x7E8, new byte[] { 0x03, 0x62, 0xF1, 0x90 });
+                }
             }
             return string.IsNullOrEmpty(error);
         }
