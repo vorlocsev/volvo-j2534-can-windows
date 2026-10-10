@@ -67,6 +67,19 @@ public sealed class UdsEcuDiscoveryTests
 
 
     [Theory]
+    [InlineData(new byte[] { 0x21, 0x62, 0xF1, 0x90, 0x01, 0x02, 0x03, 0x04 })]
+    [InlineData(new byte[] { 0x21, 0x7F, 0x22, 0x31, 0x01, 0x02, 0x03, 0x04 })]
+    public void IsLikelyUdsResponse_RejectsConsecutiveFrames(byte[] data)
+    {
+        // Continuation bytes are not a new UDS service ID, even when the
+        // first payload byte resembles a positive or negative response SID.
+        var frame = new VolvoJ2534.App.CanFrame(0x7E8, false, false, data, 0, 0);
+
+        Assert.False(VolvoJ2534.App.UdsEcuDiscovery.IsLikelyUdsResponse(frame, out var sid));
+        Assert.Null(sid);
+    }
+
+    [Theory]
     [InlineData(new byte[] { 0x03, 0x22, 0xF1, 0x90 })]
     [InlineData(new byte[] { 0x03, 0x19, 0x02, 0xFF })]
     [InlineData(new byte[] { 0x03, 0x10, 0x01, 0x00 })]
