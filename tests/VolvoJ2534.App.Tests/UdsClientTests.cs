@@ -218,4 +218,31 @@ public sealed class UdsClientTests
         Assert.Throws<InvalidOperationException>(() =>
             VolvoJ2534.App.UdsClient.ParseDtcResponse(new byte[] { 0x02, 0xFF }));
     }
+
+    [Fact]
+    public void IsUnrelatedResponse_RejectsPositiveResponseForDifferentDid()
+    {
+        Assert.True(VolvoJ2534.App.UdsClient.IsUnrelatedResponse(
+            0x22,
+            new byte[] { 0xF1, 0x90 },
+            new byte[] { 0x62, 0xF1, 0x91, 0x01 }));
+    }
+
+    [Fact]
+    public void IsUnrelatedResponse_AcceptsPositiveResponseForRequestedDid()
+    {
+        Assert.False(VolvoJ2534.App.UdsClient.IsUnrelatedResponse(
+            0x22,
+            new byte[] { 0xF1, 0x90 },
+            new byte[] { 0x62, 0xF1, 0x90, 0x01 }));
+    }
+
+    [Fact]
+    public void IsUnrelatedResponse_IgnoresNegativeResponseForDifferentService()
+    {
+        Assert.True(VolvoJ2534.App.UdsClient.IsUnrelatedResponse(
+            0x22,
+            new byte[] { 0xF1, 0x90 },
+            new byte[] { 0x7F, 0x19, 0x31 }));
+    }
 }
