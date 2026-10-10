@@ -45,7 +45,7 @@ Requirements:
 
 - Windows 11
 - Visual Studio 2022
-- .NET 8 SDK
+- .NET 10 SDK 10.0.401 (pinned in `global.json`)
 - Windows App SDK 1.8
 - x86 build for legacy 32-bit J2534 DLLs
 
@@ -59,13 +59,10 @@ The process is x86, so it can load 32-bit J2534 DLLs but not 64-bit-only DLLs.
 
 ## Next architecture steps
 
-1. Correct CAN arbitration-ID decoding.
-2. Standard/extended CAN support.
-3. J2534 hardware filters.
-4. Automatic J2534 device discovery.
-5. ISO-TP transport.
-6. UDS diagnostic layer.
-7. Volvo ECU profiles.
+1. J2534 hardware filters.
+2. Automatic J2534 device discovery.
+3. A UDS diagnostic layer for supported, non-security-sensitive services.
+4. Volvo ECU profiles for supported diagnostics.
 
 
 ### ISO-TP
