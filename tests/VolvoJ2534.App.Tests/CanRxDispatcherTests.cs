@@ -3,6 +3,22 @@ namespace VolvoJ2534.App.Tests;
 public sealed class CanRxDispatcherTests
 {
     [Fact]
+    public void Subscription_DrainPendingFramesRemovesQueuedFramesAndReturnsCount()
+    {
+        using var j2534 = new VolvoJ2534.App.J2534Native();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(j2534);
+        using var subscription = dispatcher.Subscribe(4);
+
+        subscription.Publish(Frame(0x100));
+        subscription.Publish(Frame(0x101));
+        subscription.Publish(Frame(0x102));
+
+        Assert.Equal(3, subscription.DrainPendingFrames());
+        Assert.False(subscription.TryRead(TimeSpan.Zero, CancellationToken.None, out _));
+        Assert.Equal(0, subscription.DrainPendingFrames());
+    }
+
+    [Fact]
     public void Subscription_DropsOldestFrameWhenCapacityIsReached()
     {
         using var j2534 = new VolvoJ2534.App.J2534Native();
