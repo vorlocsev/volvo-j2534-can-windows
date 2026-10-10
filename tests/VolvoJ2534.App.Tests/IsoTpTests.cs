@@ -95,6 +95,26 @@ public sealed class IsoTpTests
         Assert.False(reassembler.InProgress);
     }
 
+    [Theory]
+    [InlineData(20, new byte[] { 0x21, 0xAA, 0xBB })]
+    [InlineData(12, new byte[] { 0x21, 0xAA, 0xBB })]
+    public void Reassembler_RejectsConsecutiveFrameWithTooFewPayloadBytes(
+        int payloadLength,
+        byte[] shortFrame)
+    {
+        var payload = Enumerable.Range(0, payloadLength).Select(i => (byte)i).ToArray();
+        var firstFrameBytes = VolvoJ2534.App.IsoTp.Segment(payload)[0];
+        var reassembler = new VolvoJ2534.App.IsoTpReassembler();
+        var first = new VolvoJ2534.App.CanFrame(0x7E8, false, false, firstFrameBytes, 0, 0);
+
+        Assert.True(reassembler.Push(first, out _, out var firstError), firstError);
+        var shortFrameCan = new VolvoJ2534.App.CanFrame(0x7E8, false, false, shortFrame, 0, 0);
+
+        Assert.False(reassembler.Push(shortFrameCan, out _, out var error));
+        Assert.Contains("too short", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(reassembler.InProgress);
+    }
+
     [Fact]
     public void Reassembler_RejectsSequenceMismatch()
     {
