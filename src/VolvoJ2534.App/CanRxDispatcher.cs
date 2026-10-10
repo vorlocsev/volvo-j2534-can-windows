@@ -242,6 +242,15 @@ internal sealed class CanRxDispatcher : IDisposable
                         if (token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(100)))
                             break;
                     }
+                    else
+                    {
+                        // A few adapters return "no message" immediately with
+                        // no error instead of honoring the requested timeout.
+                        // A small idle backoff prevents a busy loop without
+                        // adding meaningful latency when the bus is active.
+                        if (token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(5)))
+                            break;
+                    }
 
                     continue;
                 }
