@@ -68,6 +68,21 @@ public sealed unsafe class CanDecoderTests
     }
 
     [Fact]
+    public void Decode_IgnoresTransmitFlagsWhenDeterminingReceivedIdWidth()
+    {
+        var message = VolvoJ2534.App.CanDecoder.Encode(
+            0x7E8,
+            new byte[] { 0x03, 0x7F, 0x22, 0x31 });
+
+        // TxFlags are not the source of identifier-width metadata for RX frames.
+        message.TxFlags = VolvoJ2534.App.CanDecoder.Can29BitId;
+
+        Assert.True(VolvoJ2534.App.CanDecoder.TryDecode(message, out var frame, out var error), error);
+        Assert.Equal((uint)0x7E8, frame.ArbitrationId);
+        Assert.False(frame.IsExtended);
+    }
+
+    [Fact]
     public void Decode_RejectsElevenBitIdWithoutExtendedFlag()
     {
         var message = new VolvoJ2534.App.J2534Native.PassthruMsg
