@@ -43,26 +43,38 @@ internal sealed class CanRxDispatcher : IDisposable
                 // completes but before TryRead. Loop until we get a frame or
                 // the original timeout expires; never report a false timeout
                 // while a concurrent reader merely won the race.
+                //
+                // Cancel each pending channel wait when its remaining budget
+                // expires. Waiting on the task with a separate timed Wait()
+                // leaves WaitToReadAsync registered on the channel after
+                // TryRead returns false, accumulating orphaned waiters during
+                // repeated timeouts.
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 while (true)
                 {
-                    var readable = _channel.Reader.WaitToReadAsync(cancellationToken).AsTask();
-                    if (!readable.IsCompleted)
-                    {
-                        var remaining = timeout - stopwatch.Elapsed;
-                        if (remaining <= TimeSpan.Zero ||
-                            !readable.Wait(remaining, cancellationToken))
-                            return false;
-                    }
-
-                    if (!readable.GetAwaiter().GetResult())
-                        return false;
-
                     if (_channel.Reader.TryRead(out frame))
                         return true;
 
-                    if (stopwatch.Elapsed >= timeout)
+                    var remaining = timeout - stopwatch.Elapsed;
+                    if (remaining <= TimeSpan.Zero)
                         return false;
+
+                    using var waitCancellation =
+                        CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    waitCancellation.CancelAfter(remaining);
+
+                    try
+                    {
+                        if (!_channel.Reader.WaitToReadAsync(waitCancellation.Token)
+                                .AsTask().GetAwaiter().GetResult())
+                            return false;
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        // The local timeout expired. Caller cancellation is
+                        // handled by the outer catch and remains observable.
+                        return false;
+                    }
                 }
             }
             catch (OperationCanceledException)

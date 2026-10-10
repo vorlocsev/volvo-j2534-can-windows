@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace VolvoJ2534.App;
 
 internal sealed class CanBus : IDisposable
@@ -57,6 +59,9 @@ internal sealed class CanBus : IDisposable
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // The timeout is a total budget for both waiting on the TX lock and
+        // the native J2534 write, not a fresh budget for each stage.
+        var elapsed = Stopwatch.StartNew();
         if (!_txLock.Wait(timeout, cancellationToken))
         {
             error = "Timed out waiting for the CAN transmit lock.";
@@ -68,9 +73,16 @@ internal sealed class CanBus : IDisposable
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
 
+            var remaining = timeout - elapsed.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                error = "CAN transmit timeout expired before adapter write.";
+                return false;
+            }
+
             var message = CanDecoder.Encode(arbitrationId, data, extended);
             var timeoutMs = (uint)Math.Clamp(
-                (long)Math.Ceiling(timeout.TotalMilliseconds), 1, uint.MaxValue);
+                (long)Math.Ceiling(remaining.TotalMilliseconds), 1, uint.MaxValue);
 
             return _j2534.Write(message, timeoutMs, out error);
         }
