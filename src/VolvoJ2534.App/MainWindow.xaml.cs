@@ -99,11 +99,20 @@ public sealed partial class MainWindow : Window
 
         if (_discoveryCts is not null) return;
 
+        // ECU discovery and active UDS requests share the same CAN bus.
+        // Serialize them so passive discovery cannot overlap a diagnostic request.
+        if (!await _udsGate.WaitAsync(0))
+        {
+            DiscoveryStatus.Text = "UDS request is already running";
+            return;
+        }
+
         var cts = new CancellationTokenSource();
         _discoveryCts = cts;
         DiscoverButton.IsEnabled = false;
         CancelDiscoveryButton.IsEnabled = true;
         ConnectButton.IsEnabled = false;
+        SetUdsEnabled(false);
         DiscoveryStatus.Text = "Scanning...";
         _ecus.Clear();
         EcuSelector.Items.Clear();
@@ -151,7 +160,9 @@ public sealed partial class MainWindow : Window
             cts.Dispose();
             CancelDiscoveryButton.IsEnabled = false;
             DiscoverButton.IsEnabled = _connected;
+            SetUdsEnabled(_connected);
             ConnectButton.IsEnabled = true;
+            _udsGate.Release();
         }
     }
 
