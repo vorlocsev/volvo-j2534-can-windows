@@ -235,6 +235,16 @@ public sealed class IsoTpTests
             () => VolvoJ2534.App.IsoTpChannel.ValidateSeparationTime((byte)stmin));
     }
 
+    [Fact]
+    public void TryDecode_RejectsClassicCanPayloadLongerThanEightBytes()
+    {
+        var can = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[9], 0, 0);
+
+        Assert.False(VolvoJ2534.App.IsoTp.TryDecode(can, out _, out var error));
+        Assert.Contains("exceeds 8 bytes", error, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(new byte[] { 0x10, 0x08 })]
     [InlineData(new byte[] { 0x10 })]
