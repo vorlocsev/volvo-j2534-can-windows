@@ -5,6 +5,22 @@ namespace VolvoJ2534.App.Tests;
 public sealed class IsoTpChannelProtocolTests
 {
     [Fact]
+    public void Request_AfterDisposeThrowsWithoutSendingCanFrame()
+    {
+        var adapter = new LateConsecutiveFrameAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(0x7E0, 0x7E8));
+
+        channel.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x90 }));
+        Assert.Equal(0, adapter.RequestCount);
+    }
+
+    [Fact]
     public void Request_RejectsFlowControlDuringMultiFrameResponse()
     {
         var adapter = new UnexpectedFlowControlResponseAdapter();
