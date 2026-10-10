@@ -121,9 +121,34 @@ internal sealed class UdsClient : IDisposable
 
         var response = _channel.Request(
             request,
-            candidate => IsResponsePending(service, candidate),
+            candidate => IsResponsePending(service, candidate) ||
+                         IsUnrelatedResponse(service, parameters, candidate),
             cancellationToken);
         return ParsePositiveResponse(service, response);
+    }
+
+    // ISO-TP only identifies the CAN conversation; it does not identify a UDS
+    // transaction. Ignore complete payloads that clearly belong to another
+    // service or request parameter, rather than failing the current request.
+    internal static bool IsUnrelatedResponse(byte requestedService, ReadOnlySpan<byte> parameters, byte[] response)
+    {
+        if (response is null || response.Length == 0)
+            return false; // Let the normal parser report malformed responses.
+
+        if (response[0] == 0x7F)
+            return response.Length >= 2 && response[1] != requestedService;
+
+        var expectedService = (byte)(requestedService + 0x40);
+        if (response[0] != expectedService)
+            return true;
+
+        if (requestedService == (byte)UdsService.ReadDataByIdentifier && parameters.Length >= 2 && response.Length >= 3)
+            return response[1] != parameters[0] || response[2] != parameters[1];
+
+        if (requestedService == (byte)UdsService.ReadDtcInformation && parameters.Length >= 1 && response.Length >= 2)
+            return response[1] != parameters[0];
+
+        return false;
     }
 
     internal static bool IsResponsePending(byte requestedService, byte[] response)
