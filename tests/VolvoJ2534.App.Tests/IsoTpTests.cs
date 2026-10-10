@@ -282,6 +282,8 @@ public sealed class IsoTpTests
     [Theory]
     [InlineData(new byte[] { 0x10, 0x08 })]
     [InlineData(new byte[] { 0x10 })]
+    [InlineData(new byte[] { 0x10, 0x14, 0xAA })]
+    [InlineData(new byte[] { 0x10, 0x14, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE })]
     public void TryDecode_RejectsFirstFrameWithoutPayload(byte[] data)
     {
         var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, data, 0, 0);
