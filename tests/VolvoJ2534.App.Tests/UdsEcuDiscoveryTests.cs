@@ -79,6 +79,17 @@ public sealed class UdsEcuDiscoveryTests
     }
 
     [Fact]
+    public void IsLikelyUdsResponse_RejectsObdPositiveResponseSid()
+    {
+        // 0x41 is an OBD-II positive response SID, not a UDS positive SID.
+        var frame = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { 0x03, 0x41, 0x00, 0x00 }, 0, 0);
+
+        Assert.False(VolvoJ2534.App.UdsEcuDiscovery.IsLikelyUdsResponse(frame, out var sid));
+        Assert.Null(sid);
+    }
+
+    [Fact]
     public void IsLikelyUdsResponse_RejectsRemoteFrames()
     {
         var frame = new VolvoJ2534.App.CanFrame(
