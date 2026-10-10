@@ -21,6 +21,40 @@ public sealed class IsoTpChannelProtocolTests
     }
 
     [Fact]
+    public async Task Dispose_CancelsInFlightRequestAndWaitsForItToExit()
+    {
+        var adapter = new LateConsecutiveFrameAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromSeconds(5),
+                ConsecutiveFrameTimeout: TimeSpan.FromSeconds(5),
+                RequestTimeout: TimeSpan.FromSeconds(10)));
+
+        var request = Task.Run(() => channel.Request(new byte[] { 0x22, 0xF1, 0x90 }));
+        try
+        {
+            Assert.True(
+                SpinWait.SpinUntil(() => adapter.RequestCount == 1, TimeSpan.FromSeconds(2)),
+                "ISO-TP request did not reach the adapter.");
+
+            channel.Dispose();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await request);
+            Assert.Equal(1, adapter.RequestCount);
+        }
+        finally
+        {
+            channel.Dispose();
+        }
+    }
+
+    [Fact]
     public void Request_RejectsFlowControlDuringMultiFrameResponse()
     {
         var adapter = new UnexpectedFlowControlResponseAdapter();
