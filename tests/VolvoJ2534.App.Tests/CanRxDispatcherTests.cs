@@ -245,6 +245,30 @@ public sealed class CanRxDispatcherTests
     }
 
     [Fact]
+    public async Task DispatcherBacksOffWhenAdapterContinuouslyReturnsReadErrors()
+    {
+        var adapter = new FakeJ2534Adapter { FailReadsContinuously = true };
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+        using var firstErrorSeen = new ManualResetEventSlim();
+        var errorCount = 0;
+
+        dispatcher.ReadError += _ =>
+        {
+            Interlocked.Increment(ref errorCount);
+            firstErrorSeen.Set();
+        };
+
+        dispatcher.Start();
+        Assert.True(firstErrorSeen.Wait(TimeSpan.FromSeconds(2)));
+        await Task.Delay(350);
+        dispatcher.Stop();
+
+        // Immediate-error adapters must not spin at CPU speed. The dispatcher
+        // backs off between failures, while still reporting recurring errors.
+        Assert.InRange(Volatile.Read(ref errorCount), 2, 10);
+    }
+
+    [Fact]
     public void DispatcherCanBeDisposedFromReadErrorCallback()
     {
         var adapter = new FakeJ2534Adapter();
@@ -354,6 +378,7 @@ public sealed class CanRxDispatcherTests
 
         internal ManualResetEventSlim? ReadEntered { get; init; }
         internal ManualResetEventSlim? AllowReadToFinish { get; init; }
+        internal bool FailReadsContinuously { get; init; }
         internal int MaxConcurrentReads => Volatile.Read(ref _maxConcurrentReads);
 
         internal void Enqueue(VolvoJ2534.App.J2534Native.PassthruMsg frame) => _frames.Enqueue(frame);
@@ -380,6 +405,13 @@ public sealed class CanRxDispatcherTests
                 AllowReadToFinish?.Wait();
                 if (Interlocked.Exchange(ref _throwNextRead, 0) != 0)
                     throw new InvalidOperationException("simulated adapter disconnect");
+
+                if (FailReadsContinuously)
+                {
+                    msg = default;
+                    error = "simulated persistent adapter read error";
+                    return false;
+                }
 
                 if (Interlocked.Exchange(ref _failNextRead, 0) != 0)
                 {
