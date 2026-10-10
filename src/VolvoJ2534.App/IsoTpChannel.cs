@@ -60,6 +60,7 @@ internal sealed class IsoTpChannel : IDisposable
     private readonly CanBus _bus;
     private readonly CanRxDispatcher.Subscription _rx;
     private readonly Options _options;
+    private readonly CancellationTokenSource _disposeCts = new();
     private int _disposed;
 
     internal IsoTpChannel(CanBus bus, Options options)
@@ -89,6 +90,9 @@ internal sealed class IsoTpChannel : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isInterimResponse);
         ThrowIfDisposed();
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, _disposeCts.Token);
+        cancellationToken = linkedCancellation.Token;
         if (payload.Length == 0 || payload.Length > IsoTp.MaxPayloadLength)
             throw new ArgumentOutOfRangeException(nameof(payload),
                 $"ISO-TP payload must be 1..{IsoTp.MaxPayloadLength} bytes.");
@@ -449,7 +453,15 @@ internal sealed class IsoTpChannel : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        // Cancel any transaction first so waits for Flow Control or a response
+        // unwind promptly. Then wait for the request gate before disposing RX:
+        // an in-flight request must not keep sending CAN frames against a
+        // disposed channel or race its subscription teardown.
+        _disposeCts.Cancel();
+        lock (_requestGate)
             _rx.Dispose();
     }
 }
