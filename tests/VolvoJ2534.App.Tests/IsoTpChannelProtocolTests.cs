@@ -71,6 +71,30 @@ public sealed class IsoTpChannelProtocolTests
     }
 
     [Fact]
+    public void UdsClient_RepeatedResponsePendingDoesNotExtendOverallRequestTimeout()
+    {
+        var adapter = new RepeatedPendingResponseAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(500),
+                RequestTimeout: TimeSpan.FromMilliseconds(220)));
+        using var client = new VolvoJ2534.App.UdsClient(channel);
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Assert.Throws<TimeoutException>(() => client.ReadDataByIdentifier(0xF190));
+
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1),
+            "Repeated response-pending frames extended the request beyond its overall deadline.");
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
+    [Fact]
     public void UdsClient_RejectsTruncatedReadDataByIdentifierResponse()
     {
         var adapter = new UnrelatedThenMatchingDidAdapter(new byte[] { 0x02, 0x62, 0xF1 });
@@ -195,6 +219,44 @@ public sealed class IsoTpChannelProtocolTests
 
         await firstRequest.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(1, adapter.WriteCount);
+    }
+
+    private sealed class RepeatedPendingResponseAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private int _responded;
+        private int _writeCount;
+
+        internal int WriteCount => Volatile.Read(ref _writeCount);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            Thread.Sleep((int)Math.Min(timeout, 50));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            Interlocked.Increment(ref _writeCount);
+            if (Interlocked.Exchange(ref _responded, 1) == 0)
+            {
+                for (var i = 0; i < 12; i++)
+                    _incoming.Enqueue(VolvoJ2534.App.CanDecoder.Encode(
+                        0x7E8, new byte[] { 0x03, 0x7F, 0x22, 0x78 }));
+                _incomingReady.Set();
+            }
+
+            return true;
+        }
+
+        public void Unload() { }
     }
 
     private sealed class PendingThenFinalResponseAdapter : VolvoJ2534.App.IJ2534Adapter
