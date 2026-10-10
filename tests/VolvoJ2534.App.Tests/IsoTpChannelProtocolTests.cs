@@ -665,4 +665,102 @@ public sealed class IsoTpChannelProtocolTests
 
         public void Unload() { }
     }
+
+
+    [Fact]
+    public void Request_ReassemblesMultiFrameResponseAcrossSequenceNumberRollover()
+    {
+        var adapter = new SequenceNumberRolloverAdapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(500),
+                ConsecutiveFrameTimeout: TimeSpan.FromMilliseconds(500),
+                RequestTimeout: TimeSpan.FromSeconds(3)));
+
+        var response = channel.Request(new byte[] { 0x22, 0xF1, 0x90 });
+
+        Assert.Equal(adapter.ExpectedPayload, response);
+        Assert.Equal(16, adapter.ConsecutiveFramesSent);
+    }
+
+    private sealed class SequenceNumberRolloverAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private int _consecutiveFramesSent;
+
+        internal byte[] ExpectedPayload { get; } = CreatePayload();
+        internal int ConsecutiveFramesSent => Volatile.Read(ref _consecutiveFramesSent);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (_incoming.TryDequeue(out msg))
+                return true;
+
+            _incomingReady.WaitOne(TimeSpan.FromMilliseconds(timeout));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (!VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
+                return false;
+
+            if ((frame.Data[0] >> 4) == 3)
+            {
+                // A 118-byte payload requires 16 CFs, so the PCI sequence rolls
+                // over from 0x2F to 0x20 on the final consecutive frame.
+                for (var frameIndex = 0; frameIndex < 16; frameIndex++)
+                {
+                    var cf = new byte[8];
+                    cf[0] = (byte)(0x20 | ((frameIndex + 1) & 0x0F));
+                    var offset = 6 + frameIndex * 7;
+                    ExpectedPayload.AsSpan(offset, 7).CopyTo(cf.AsSpan(1));
+                    Enqueue(cf);
+                    Interlocked.Increment(ref _consecutiveFramesSent);
+                }
+            }
+            else if ((frame.Data[0] >> 4) == 0)
+            {
+                var firstFrame = new byte[8];
+                firstFrame[0] = 0x10;
+                firstFrame[1] = (byte)ExpectedPayload.Length;
+                ExpectedPayload.AsSpan(0, 6).CopyTo(firstFrame.AsSpan(2));
+                Enqueue(firstFrame);
+            }
+
+            return true;
+        }
+
+        private static byte[] CreatePayload()
+        {
+            var payload = new byte[118];
+            payload[0] = 0x62;
+            payload[1] = 0xF1;
+            payload[2] = 0x90;
+            for (var i = 3; i < payload.Length; i++)
+                payload[i] = (byte)(i & 0xFF);
+            return payload;
+        }
+
+        private void Enqueue(byte[] data)
+        {
+            _incoming.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, data));
+            _incomingReady.Set();
+        }
+
+        public void Unload() { }
+    }
 }
