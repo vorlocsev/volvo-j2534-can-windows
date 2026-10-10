@@ -9,6 +9,11 @@ internal static unsafe class CanDecoder
     private const int MaxClassicCanData = 8;
     private const int MaxCanMessageSize = HeaderSize + MaxClassicCanData;
 
+    // The UI infers identifier width from the numeric ID. A single ISO-TP
+    // channel cannot mix standard and extended CAN frames.
+    internal static bool HaveSameNumericCanIdWidth(uint firstId, uint secondId)
+        => (firstId > 0x7FF) == (secondId > 0x7FF);
+
     internal static bool TryDecode(in J2534Native.PassthruMsg message, out CanFrame frame, out string error)
     {
         frame = default;
