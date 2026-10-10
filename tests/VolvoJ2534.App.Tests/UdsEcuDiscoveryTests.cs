@@ -89,6 +89,17 @@ public sealed class UdsEcuDiscoveryTests
         Assert.Null(sid);
     }
 
+    [Theory]
+    [InlineData(new byte[] { 0x01, 0x7F })]
+    [InlineData(new byte[] { 0x02, 0x7F, 0x22 })]
+    public void IsLikelyUdsResponse_RejectsTruncatedNegativeResponse(byte[] data)
+    {
+        var frame = new VolvoJ2534.App.CanFrame(0x7E8, false, false, data, 0, 0);
+
+        Assert.False(VolvoJ2534.App.UdsEcuDiscovery.IsLikelyUdsResponse(frame, out var sid));
+        Assert.Null(sid);
+    }
+
     [Fact]
     public void IsLikelyUdsResponse_RejectsRemoteFrames()
     {
