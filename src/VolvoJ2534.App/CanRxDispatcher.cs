@@ -87,6 +87,16 @@ internal sealed class CanRxDispatcher : IDisposable
             }
         }
 
+        // Remove frames already buffered before a new ISO-TP transaction begins.
+        // Frames that arrive after this operation still require UDS-level correlation.
+        internal int DrainPendingFrames()
+        {
+            var drained = 0;
+            while (_channel.Reader.TryRead(out _))
+                drained++;
+            return drained;
+        }
+
         internal void Publish(in CanFrame frame)
         {
             if (VolvoJ2534.App.CanRxDispatcher.IsDisposed(_disposed))
