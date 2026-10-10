@@ -703,4 +703,34 @@ public sealed class IsoTpTests
 
         ~ScenarioJ2534Adapter() => _incomingReady.Dispose();
     }
+
+    [Theory]
+    [InlineData(new byte[] { 0x10, 0x00, 0xAA })]
+    [InlineData(new byte[] { 0x10, 0x07, 0xAA, 0xBB, 0xCC })]
+    public void TryDecode_RejectsFirstFrameWithDeclaredLengthBelowMinimum(byte[] data)
+    {
+        var can = new VolvoJ2534.App.CanFrame(0x7E8, false, false, data, 0, 0);
+
+        Assert.False(VolvoJ2534.App.IsoTp.TryDecode(can, out _, out var error));
+        Assert.Contains("payload length", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Reassembler_InvalidFirstFrameResetsPreviouslyIncompleteMessage()
+    {
+        var reassembler = new VolvoJ2534.App.IsoTpReassembler();
+        var validFirst = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false,
+            new byte[] { 0x10, 0x14, 0x62, 0xF1, 0x90, 0x01, 0x02, 0x03 }, 0, 0);
+
+        Assert.True(reassembler.Push(validFirst, out _, out var validError), validError);
+        Assert.True(reassembler.InProgress);
+
+        var malformedFirst = new VolvoJ2534.App.CanFrame(
+            0x7E8, false, false, new byte[] { 0x10, 0x07, 0x62, 0xF1, 0x90 }, 0, 0);
+        Assert.False(reassembler.Push(malformedFirst, out _, out var error));
+        Assert.Contains("payload length", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(reassembler.InProgress);
+    }
+
 }
