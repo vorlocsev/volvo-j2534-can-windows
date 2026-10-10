@@ -184,8 +184,12 @@ internal sealed class IsoTpChannel : IDisposable
                         if (!IsoTp.TryDecode(frame, out iso, out error))
                             throw new InvalidOperationException(error);
 
-                        if (iso.Type != IsoTpFrameType.ConsecutiveFrame)
+                        if (iso.Type == IsoTpFrameType.FlowControl)
                             continue;
+
+                        if (iso.Type != IsoTpFrameType.ConsecutiveFrame)
+                            throw new InvalidOperationException(
+                                $"Unexpected ISO-TP {iso.Type} while receiving a multi-frame response.");
 
                         if (!reassembler.Push(frame, out payload, out error))
                             throw new InvalidOperationException(error);
