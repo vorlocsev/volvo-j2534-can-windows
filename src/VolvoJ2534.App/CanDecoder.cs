@@ -31,8 +31,9 @@ internal static unsafe class CanDecoder
                  ((uint)message.Data[2] << 8) |
                  message.Data[3];
 
-        var extended = (message.RxStatus & Can29BitId) != 0 ||
-                       (message.TxFlags & Can29BitId) != 0;
+        // RxStatus describes a received frame. TxFlags are transmit
+        // options and must not change how a received arbitration ID is decoded.
+        var extended = (message.RxStatus & Can29BitId) != 0;
 
         // Do not silently reinterpret an invalid 11-bit message as 29-bit.
         // J2534 requires the CAN_29BIT_ID flag to describe the identifier type.
