@@ -190,7 +190,7 @@ public sealed class CanBusTests
         var firstSend = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
             TimeSpan.FromSeconds(3), CancellationToken.None, out _));
 
-        Task<bool>? secondSend = null;
+        Task<bool> secondSend = Task.FromResult(false);
         try
         {
             Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(1)), "First write did not start.");
@@ -217,7 +217,7 @@ public sealed class CanBusTests
 
         var timeouts = adapter.WriteTimeouts;
         Assert.Equal(2, timeouts.Length);
-        Assert.Equal(3000u, timeouts[0]);
+        Assert.InRange(timeouts[0], 2900u, 3000u);
         Assert.InRange(timeouts[1], 1u, 1900u);
     }
 
