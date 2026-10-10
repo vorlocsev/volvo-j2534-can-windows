@@ -236,7 +236,7 @@ public sealed class CanBusTests
     }
 
     [Fact]
-    public async Task DisposeDuringActiveSendDoesNotBreakTransmitLockRelease()
+    public async Task DisposeWaitsForActiveSendBeforeReturning()
     {
         using var writeEntered = new ManualResetEventSlim();
         using var allowWriteToFinish = new ManualResetEventSlim();
@@ -249,11 +249,18 @@ public sealed class CanBusTests
 
         var sendTask = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
             TimeSpan.FromSeconds(2), CancellationToken.None, out _));
+        Task? disposeTask = null;
 
         try
         {
             Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(1)), "CAN write did not start.");
-            bus.Dispose();
+            disposeTask = Task.Run(bus.Dispose);
+
+            // Dispose must not return while the native adapter write is active:
+            // J2534Session unloads the DLL as soon as bus disposal returns.
+            await Task.Delay(100);
+            Assert.False(disposeTask.IsCompleted,
+                "CanBus.Dispose returned while the adapter write was still active.");
         }
         finally
         {
@@ -261,6 +268,7 @@ public sealed class CanBusTests
         }
 
         Assert.True(await sendTask);
+        await (disposeTask ?? Task.Run(bus.Dispose)).WaitAsync(TimeSpan.FromSeconds(2));
         bus.Dispose();
         Assert.Throws<ObjectDisposedException>(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 },
             false, TimeSpan.FromMilliseconds(100), CancellationToken.None, out _));
