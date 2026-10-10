@@ -340,4 +340,85 @@ public sealed class IsoTpTests
 
         Assert.Equal(new byte[] { 0x30, 0x08, 0x0A, 0, 0, 0, 0, 0 }, frame);
     }
+
+    [Fact]
+    public void IsoTpChannel_CompletesSingleFrameRequestResponse()
+    {
+        var adapter = new ScenarioJ2534Adapter();
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(300),
+                RequestTimeout: TimeSpan.FromSeconds(1)));
+
+        var response = channel.Request(new byte[] { 0x22, 0xF1, 0x90 });
+
+        Assert.Equal(new byte[] { 0x62, 0xF1, 0x90, 0x12 }, response);
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
+    [Fact]
+    public void IsoTpChannel_TimesOutWhenNoResponseArrives()
+    {
+        var adapter = new ScenarioJ2534Adapter { RespondToWrites = false };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(50),
+                RequestTimeout: TimeSpan.FromMilliseconds(200)));
+
+        Assert.Throws<TimeoutException>(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x90 }));
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
+    private sealed class ScenarioJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private int _writeCount;
+
+        internal bool RespondToWrites { get; init; } = true;
+        internal int WriteCount => Volatile.Read(ref _writeCount);
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (_incoming.TryDequeue(out msg))
+                return true;
+
+            _incomingReady.WaitOne(TimeSpan.FromMilliseconds(timeout));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            Interlocked.Increment(ref _writeCount);
+            if (RespondToWrites)
+            {
+                var response = VolvoJ2534.App.CanDecoder.Encode(
+                    0x7E8, new byte[] { 0x04, 0x62, 0xF1, 0x90, 0x12 });
+                _incoming.Enqueue(response);
+                _incomingReady.Set();
+            }
+            return true;
+        }
+
+        public void Unload() { }
+
+        ~ScenarioJ2534Adapter() => _incomingReady.Dispose();
+    }
 }
