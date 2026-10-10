@@ -246,3 +246,30 @@ public sealed class UdsClientTests
             new byte[] { 0x7F, 0x19, 0x31 }));
     }
 }
+
+    [Fact]
+    public void IsUnrelatedResponse_IgnoresPositiveDtcResponseForDifferentSubfunction()
+    {
+        Assert.True(VolvoJ2534.App.UdsClient.IsUnrelatedResponse(
+            0x19,
+            new byte[] { 0x02, 0xFF },
+            new byte[] { 0x59, 0x01, 0xFF, 0x00 }));
+    }
+
+    [Fact]
+    public void IsUnrelatedResponse_AcceptsPositiveDtcResponseForRequestedSubfunction()
+    {
+        Assert.False(VolvoJ2534.App.UdsClient.IsUnrelatedResponse(
+            0x19,
+            new byte[] { 0x02, 0xFF },
+            new byte[] { 0x59, 0x02, 0xFF, 0x00 }));
+    }
+
+    [Fact]
+    public void IsUnrelatedResponse_DoesNotIgnoreNegativeResponseForRequestedService()
+    {
+        Assert.False(VolvoJ2534.App.UdsClient.IsUnrelatedResponse(
+            0x22,
+            new byte[] { 0xF1, 0x90 },
+            new byte[] { 0x7F, 0x22, 0x31 }));
+    }
