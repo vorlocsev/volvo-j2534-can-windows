@@ -263,4 +263,43 @@ public sealed class VirtualJ2534AdapterTests
             channel.Request(new byte[] { 0x22, 0xF1, 0x90 }));
         Assert.Equal(1, adapter.TransmittedFrames);
     }
+
+    [Fact]
+    public async Task VirtualAdapter_SerializesConcurrentRequestsAndKeepsResponsesCorrelated()
+    {
+        using var adapter = new VirtualJ2534Adapter(request =>
+        {
+            if (request.ArbitrationId != 0x7E0 ||
+                request.Data.Length < 4 ||
+                request.Data[1] != 0x22 ||
+                request.Data[2] != 0xF1)
+                return Array.Empty<VolvoJ2534.App.CanFrame>();
+
+            var didLowByte = request.Data[3];
+            return new[]
+            {
+                new VolvoJ2534.App.CanFrame(
+                    0x7E8, false, false,
+                    new byte[] { 0x04, 0x62, 0xF1, didLowByte, (byte)(didLowByte ^ 0xFF) },
+                    0, 0)
+            };
+        });
+
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(500),
+                RequestTimeout: TimeSpan.FromSeconds(2)));
+
+        var first = Task.Run(() => channel.Request(new byte[] { 0x22, 0xF1, 0x90 }));
+        var second = Task.Run(() => channel.Request(new byte[] { 0x22, 0xF1, 0x91 }));
+        var responses = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.Equal(new byte[] { 0x62, 0xF1, 0x90, 0x6F }, responses[0]);
+        Assert.Equal(new byte[] { 0x62, 0xF1, 0x91, 0x6E }, responses[1]);
+        Assert.Equal(2, adapter.TransmittedFrames);
+    }
 }
