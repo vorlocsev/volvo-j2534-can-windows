@@ -111,7 +111,7 @@ internal sealed class UdsEcuDiscovery
         // Positive response SID = request SID + 0x40.
         // Current read-only client uses the standard 0x10..0x3E/0x22/0x19
         // service range, whose positive SIDs are in 0x50..0x7E.
-        if (sid is >= 0x41 and <= 0x7E)
+        if (sid is >= 0x50 and <= 0x7E)
         {
             responseService = sid;
             return true;
