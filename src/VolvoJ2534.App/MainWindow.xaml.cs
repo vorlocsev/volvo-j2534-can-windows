@@ -185,6 +185,7 @@ public sealed partial class MainWindow : Window
         if (row.Candidate.RequestId is uint requestId)
             UdsRequestId.Text = requestId.ToString(row.Candidate.IsExtended ? "X8" : "X3");
         UdsResponseId.Text = row.Candidate.ResponseId.ToString(row.Candidate.IsExtended ? "X8" : "X3");
+        CanIdFormat.SelectedIndex = row.Candidate.IsExtended ? 1 : 0;
 
         if (EcuSelector.SelectedIndex != index)
             EcuSelector.SelectedIndex = index;
@@ -223,13 +224,13 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        if (!CanDecoder.HaveSameNumericCanIdWidth(requestId, responseId))
+        if (CanIdFormat.SelectedIndex is not (0 or 1))
         {
-            error = "Request and response CAN IDs must both use 11-bit or both use 29-bit addressing.";
+            error = "Select 11-bit or 29-bit CAN ID format.";
             return false;
         }
 
-        var canExtendedId = requestId > 0x7FF;
+        var canExtendedId = CanIdFormat.SelectedIndex == 1;
 
         try
         {
