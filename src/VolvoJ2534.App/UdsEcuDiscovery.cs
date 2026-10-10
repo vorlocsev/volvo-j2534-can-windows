@@ -104,6 +104,12 @@ internal sealed class UdsEcuDiscovery
         // UDS negative response.
         if (sid == 0x7F)
         {
+            // A UDS negative response must contain the original service and
+            // a negative-response code after 0x7F. A truncated frame is not
+            // enough evidence to classify this CAN ID as a UDS responder.
+            if (iso.Data.Length < 3)
+                return false;
+
             responseService = sid;
             return true;
         }
