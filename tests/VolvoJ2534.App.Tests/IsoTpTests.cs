@@ -380,6 +380,42 @@ public sealed class IsoTpTests
         Assert.Equal(1, adapter.WriteCount);
     }
 
+    [Fact]
+    public async Task IsoTpChannel_CancellationInterruptsWaitingForResponse()
+    {
+        var adapter = new ScenarioJ2534Adapter { RespondToWrites = false };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FrameTimeout: TimeSpan.FromSeconds(2),
+                RequestTimeout: TimeSpan.FromSeconds(5)));
+        using var cancellation = new CancellationTokenSource();
+
+        var request = Task.Run(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x90 }, cancellation.Token));
+
+        try
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+            while (adapter.WriteCount == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
+
+            Assert.Equal(1, adapter.WriteCount);
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                request.WaitAsync(TimeSpan.FromSeconds(1)));
+        }
+        finally
+        {
+            cancellation.Cancel();
+        }
+    }
+
     private sealed class ScenarioJ2534Adapter : VolvoJ2534.App.IJ2534Adapter
     {
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
