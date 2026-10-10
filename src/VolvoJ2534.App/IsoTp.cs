@@ -63,9 +63,13 @@ internal static class IsoTp
 
             case IsoTpFrameType.FirstFrame:
             {
-                if (frame.Data.Length < 3)
+                // First Frames are used only for payloads larger than a
+                // Single Frame and must carry six initial payload bytes in
+                // Classic CAN (8-byte CAN data field). Accepting a truncated
+                // First Frame would shift the reassembled payload silently.
+                if (frame.Data.Length != 8)
                 {
-                    error = "Invalid ISO-TP First Frame: payload bytes are missing.";
+                    error = $"Invalid ISO-TP First Frame length: expected 8 CAN data bytes, got {frame.Data.Length}.";
                     return false;
                 }
 
