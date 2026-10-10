@@ -260,10 +260,12 @@ internal sealed class IsoTpReassembler
 
             case IsoTpFrameType.FlowControl:
                 error = "Flow Control is not a reassembled payload.";
+                Reset();
                 return false;
 
             default:
                 error = "Unsupported ISO-TP frame type.";
+                Reset();
                 return false;
         }
     }
