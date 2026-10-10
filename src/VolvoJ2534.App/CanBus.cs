@@ -115,8 +115,16 @@ internal sealed class CanBus : IDisposable
             return;
 
         _rx.Dispose();
-        // Do not dispose the semaphore while a Send call may still be in
-        // its finally block. A concurrent Dispose would make Release throw.
-        // The semaphore is managed and safe to leave for collection.
+
+        // J2534Session unloads the native DLL immediately after CanBus.Dispose.
+        // Wait for any in-flight native write to leave the adapter before
+        // returning, otherwise Dispose could unload code still executing.
+        // A Send that was queued before disposal rechecks _disposed after
+        // acquiring this lock and therefore cannot start a new native write.
+        _txLock.Wait();
+        _txLock.Release();
+
+        // Do not dispose the semaphore: concurrent Send calls may still be
+        // unwinding after observing _disposed, and must be able to Release it.
     }
 }
