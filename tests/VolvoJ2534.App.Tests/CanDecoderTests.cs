@@ -45,6 +45,22 @@ public sealed unsafe class CanDecoderTests
     }
 
     [Fact]
+    public void EncodeDecode_ExtendedCanIdPreservesWidthForLowNumericId()
+    {
+        // A 29-bit CAN identifier can be numerically below 0x800.
+        const uint id = 0x123;
+        var message = VolvoJ2534.App.CanDecoder.Encode(
+            id,
+            new byte[] { 0x01, 0x22 },
+            extended: true);
+
+        Assert.True(VolvoJ2534.App.CanDecoder.TryDecode(message, out var frame, out var error), error);
+        Assert.Equal(id, frame.ArbitrationId);
+        Assert.True(frame.IsExtended);
+        Assert.Equal(new byte[] { 0x01, 0x22 }, frame.Data);
+    }
+
+    [Fact]
     public void Encode_RejectsInvalidStandardId()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
