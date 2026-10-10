@@ -431,14 +431,17 @@ public sealed class IsoTpTests
                 FrameTimeout: TimeSpan.FromMilliseconds(300),
                 RequestTimeout: TimeSpan.FromSeconds(2)));
 
-        var payload = Enumerable.Range(0, 20).Select(i => (byte)i).ToArray();
+        // 27 bytes require one First Frame and three Consecutive Frames.
+        // The receiver grants only one CF per Flow Control block.
+        var payload = Enumerable.Range(0, 27).Select(i => (byte)i).ToArray();
         var response = channel.Request(payload);
 
         Assert.Equal(new byte[] { 0x62, 0xF1, 0x90 }, response);
-        Assert.Equal(3, adapter.SentFrames.Count);
+        Assert.Equal(4, adapter.SentFrames.Count);
         Assert.Equal(0x10, adapter.SentFrames[0].Data[0] & 0xF0);
         Assert.Equal(0x21, adapter.SentFrames[1].Data[0]);
         Assert.Equal(0x22, adapter.SentFrames[2].Data[0]);
+        Assert.Equal(0x23, adapter.SentFrames[3].Data[0]);
     }
 
     private sealed class MultiFrameScenarioAdapter : VolvoJ2534.App.IJ2534Adapter
@@ -469,9 +472,11 @@ public sealed class IsoTpTests
             if (VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
             {
                 _sentFrames.Enqueue(frame);
-                if (_sentFrames.Count == 1)
-                    Enqueue(0x7E8, new byte[] { 0x30, 0x00, 0x00 });
-                else if (_sentFrames.Count == 3)
+                // Block Size=1 means the sender must request another FC
+                // after each CF while more payload remains.
+                if (_sentFrames.Count is 1 or 2 or 3)
+                    Enqueue(0x7E8, new byte[] { 0x30, 0x01, 0x00 });
+                else if (_sentFrames.Count == 4)
                     Enqueue(0x7E8, new byte[] { 0x03, 0x62, 0xF1, 0x90 });
             }
             return string.IsNullOrEmpty(error);
