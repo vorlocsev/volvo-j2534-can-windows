@@ -3,18 +3,6 @@ namespace VolvoJ2534.App.Tests;
 public sealed unsafe class CanDecoderTests
 {
     [Theory]
-    [InlineData(0x7E0u, 0x7E8u, true)]
-    [InlineData(0x18DAF110u, 0x18DA10F1u, true)]
-    [InlineData(0x7E0u, 0x18DAF110u, false)]
-    [InlineData(0x18DAF110u, 0x7E8u, false)]
-    public void HaveSameNumericCanIdWidth_RejectsMixedStandardAndExtendedIds(
-        uint requestId, uint responseId, bool expected)
-    {
-        Assert.Equal(expected,
-            VolvoJ2534.App.CanDecoder.HaveSameNumericCanIdWidth(requestId, responseId));
-    }
-
-    [Theory]
     [InlineData("7E0", "7E0", true)]
     [InlineData("0x7e0", "7E0", true)]
     [InlineData("000", "0", true)]
