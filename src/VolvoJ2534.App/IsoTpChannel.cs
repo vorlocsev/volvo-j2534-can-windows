@@ -79,10 +79,21 @@ internal sealed class IsoTpChannel : IDisposable
     internal byte[] Request(ReadOnlySpan<byte> payload, CancellationToken cancellationToken = default)
         => Request(payload, static _ => false, cancellationToken);
 
+    private readonly object _requestGate = new();
+
     internal byte[] Request(
         ReadOnlySpan<byte> payload,
         Func<byte[], bool> isInterimResponse,
         CancellationToken cancellationToken = default)
+    {
+        lock (_requestGate)
+            return RequestLocked(payload, isInterimResponse, cancellationToken);
+    }
+
+    private byte[] RequestLocked(
+        ReadOnlySpan<byte> payload,
+        Func<byte[], bool> isInterimResponse,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(isInterimResponse);
         if (payload.Length == 0 || payload.Length > IsoTp.MaxPayloadLength)
@@ -91,6 +102,11 @@ internal sealed class IsoTpChannel : IDisposable
 
         var deadline = Stopwatch.GetTimestamp() + ToTimestampTicks(_options.EffectiveRequestTimeout);
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Drop frames that were buffered before this transaction. This prevents
+        // already-queued frames from a timed-out request being consumed as the
+        // next response. Frames arriving after the drain still need UDS correlation.
+        _rx.DrainPendingFrames();
 
         var frames = IsoTp.Segment(payload);
         if (frames.Count == 1)
