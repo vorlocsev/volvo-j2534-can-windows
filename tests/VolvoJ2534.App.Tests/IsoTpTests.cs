@@ -435,7 +435,7 @@ public sealed class IsoTpTests
         var response = channel.Request(new byte[] { 0x22, 0xF1, 0x90 });
 
         Assert.Equal(Enumerable.Range(0, 20).Select(i => (byte)i), response);
-        Assert.Equal(2, adapter.FlowControlWrites.Count);
+        Assert.Equal(2, adapter.FlowControlWrites.Length);
         Assert.All(adapter.FlowControlWrites, frame =>
         {
             Assert.Equal(0x30, frame.Data[0]);
@@ -509,7 +509,7 @@ public sealed class IsoTpTests
         var response = channel.Request(payload);
 
         Assert.Equal(new byte[] { 0x62, 0xF1, 0x90 }, response);
-        Assert.Equal(4, adapter.SentFrames.Count);
+        Assert.Equal(4, adapter.SentFrames.Length);
         Assert.Equal(0x10, adapter.SentFrames[0].Data[0] & 0xF0);
         Assert.Equal(0x21, adapter.SentFrames[1].Data[0]);
         Assert.Equal(0x22, adapter.SentFrames[2].Data[0]);
