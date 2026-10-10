@@ -86,23 +86,45 @@ internal sealed class IsoTpChannel : IDisposable
         Func<byte[], bool> isInterimResponse,
         CancellationToken cancellationToken = default)
     {
-        lock (_requestGate)
-            return RequestLocked(payload, isInterimResponse, cancellationToken);
-    }
-
-    private byte[] RequestLocked(
-        ReadOnlySpan<byte> payload,
-        Func<byte[], bool> isInterimResponse,
-        CancellationToken cancellationToken)
-    {
         ArgumentNullException.ThrowIfNull(isInterimResponse);
         if (payload.Length == 0 || payload.Length > IsoTp.MaxPayloadLength)
             throw new ArgumentOutOfRangeException(nameof(payload),
                 $"ISO-TP payload must be 1..{IsoTp.MaxPayloadLength} bytes.");
 
+        // The request timeout includes time spent waiting for another transaction
+        // to release the channel. A regular lock would make that wait impossible
+        // to cancel and would start the timeout only after acquiring the lock.
         var deadline = Stopwatch.GetTimestamp() + ToTimestampTicks(_options.EffectiveRequestTimeout);
-        cancellationToken.ThrowIfCancellationRequested();
+        var entered = false;
+        try
+        {
+            while (!entered)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var remaining = Remaining(deadline);
+                if (remaining <= TimeSpan.Zero)
+                    throw new TimeoutException("ISO-TP request timeout expired while waiting for the channel.");
 
+                var waitMilliseconds = Math.Max(1, (int)Math.Min(10, Math.Ceiling(remaining.TotalMilliseconds)));
+                entered = Monitor.TryEnter(_requestGate, waitMilliseconds);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return RequestLocked(payload, isInterimResponse, deadline, cancellationToken);
+        }
+        finally
+        {
+            if (entered)
+                Monitor.Exit(_requestGate);
+        }
+    }
+
+    private byte[] RequestLocked(
+        ReadOnlySpan<byte> payload,
+        Func<byte[], bool> isInterimResponse,
+        long deadline,
+        CancellationToken cancellationToken)
+    {
         // Drop frames that were buffered before this transaction. This prevents
         // already-queued frames from a timed-out request being consumed as the
         // next response. Frames arriving after the drain still need UDS correlation.
