@@ -38,6 +38,8 @@ public sealed unsafe class CanDecoderTests
             new byte[] { 0x03, 0x22, 0xF1, 0x90 },
             extended: true);
 
+        // Encode produces a transmit message; emulate the J2534 receive metadata.
+        message.RxStatus = VolvoJ2534.App.CanDecoder.Can29BitId;
         Assert.True(VolvoJ2534.App.CanDecoder.TryDecode(message, out var frame, out var error), error);
         Assert.Equal(id, frame.ArbitrationId);
         Assert.True(frame.IsExtended);
