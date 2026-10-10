@@ -269,6 +269,21 @@ public sealed class CanRxDispatcherTests
     }
 
     [Fact]
+    public async Task DispatcherBacksOffWhenAdapterReturnsEmptyReadsImmediately()
+    {
+        var adapter = new FakeJ2534Adapter { ReturnEmptyReadsContinuously = true };
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+
+        dispatcher.Start();
+        await Task.Delay(100);
+        dispatcher.Stop();
+
+        // The adapter returns false with no error immediately; this still
+        // must not turn the receive loop into a CPU-speed polling loop.
+        Assert.InRange(adapter.ReadCount, 1, 100);
+    }
+
+    [Fact]
     public void DispatcherCanBeDisposedFromReadErrorCallback()
     {
         var adapter = new FakeJ2534Adapter();
@@ -375,10 +390,13 @@ public sealed class CanRxDispatcherTests
         private int _throwNextRead;
         private int _activeReads;
         private int _maxConcurrentReads;
+        private int _readCount;
+        internal int ReadCount => Volatile.Read(ref _readCount);
 
         internal ManualResetEventSlim? ReadEntered { get; init; }
         internal ManualResetEventSlim? AllowReadToFinish { get; init; }
         internal bool FailReadsContinuously { get; init; }
+        internal bool ReturnEmptyReadsContinuously { get; init; }
         internal int MaxConcurrentReads => Volatile.Read(ref _maxConcurrentReads);
 
         internal void Enqueue(VolvoJ2534.App.J2534Native.PassthruMsg frame) => _frames.Enqueue(frame);
@@ -397,6 +415,7 @@ public sealed class CanRxDispatcherTests
 
         public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
         {
+            Interlocked.Increment(ref _readCount);
             var active = Interlocked.Increment(ref _activeReads);
             UpdateMaxConcurrentReads(active);
             try
@@ -410,6 +429,13 @@ public sealed class CanRxDispatcherTests
                 {
                     msg = default;
                     error = "simulated persistent adapter read error";
+                    return false;
+                }
+
+                if (ReturnEmptyReadsContinuously)
+                {
+                    msg = default;
+                    error = string.Empty;
                     return false;
                 }
 
