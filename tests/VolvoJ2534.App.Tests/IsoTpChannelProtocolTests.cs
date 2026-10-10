@@ -763,4 +763,98 @@ public sealed class IsoTpChannelProtocolTests
 
         public void Unload() { }
     }
+
+
+    [Fact]
+    public void Request_RejectsSkippedConsecutiveFrameSequenceNumber()
+    {
+        AssertBadConsecutiveFrameSequence(duplicate: false);
+    }
+
+    [Fact]
+    public void Request_RejectsDuplicateConsecutiveFrameSequenceNumber()
+    {
+        AssertBadConsecutiveFrameSequence(duplicate: true);
+    }
+
+    private static void AssertBadConsecutiveFrameSequence(bool duplicate)
+    {
+        var adapter = new InvalidConsecutiveSequenceAdapter(duplicate);
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(500),
+                ConsecutiveFrameTimeout: TimeSpan.FromMilliseconds(500),
+                RequestTimeout: TimeSpan.FromSeconds(2)));
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x90 }));
+
+        Assert.Contains("sequence mismatch", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class InvalidConsecutiveSequenceAdapter : VolvoJ2534.App.IJ2534Adapter
+    {
+        private readonly ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
+        private readonly AutoResetEvent _incomingReady = new(false);
+        private readonly bool _duplicate;
+
+        internal InvalidConsecutiveSequenceAdapter(bool duplicate) => _duplicate = duplicate;
+
+        public bool Load(string path, out string error) { error = string.Empty; return true; }
+        public bool Open(out string error) { error = string.Empty; return true; }
+        public bool Connect(uint baudRate, out string error) { error = string.Empty; return true; }
+
+        public bool Read(out VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (_incoming.TryDequeue(out msg))
+                return true;
+
+            _incomingReady.WaitOne(TimeSpan.FromMilliseconds(timeout));
+            return _incoming.TryDequeue(out msg);
+        }
+
+        public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
+        {
+            error = string.Empty;
+            if (!VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
+                return false;
+
+            if ((frame.Data[0] >> 4) == 3)
+            {
+                if (_duplicate)
+                {
+                    Enqueue(new byte[] { 0x21, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
+                    Enqueue(new byte[] { 0x21, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D });
+                }
+                else
+                {
+                    // The receiver expects sequence 1; sequence 2 skips a CF.
+                    Enqueue(new byte[] { 0x22, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
+                }
+            }
+            else if ((frame.Data[0] >> 4) == 0)
+            {
+                // Declared length 20 requires more than one consecutive frame.
+                Enqueue(new byte[] { 0x10, 0x14, 0x62, 0xF1, 0x90, 0x01, 0x02, 0x03 });
+            }
+
+            return true;
+        }
+
+        private void Enqueue(byte[] data)
+        {
+            _incoming.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, data));
+            _incomingReady.Set();
+        }
+
+        public void Unload() { }
+    }
+
 }
