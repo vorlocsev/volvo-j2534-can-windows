@@ -175,6 +175,53 @@ public sealed class CanBusTests
     }
 
     [Fact]
+    public async Task SendPassesOnlyRemainingTimeoutToAdapterAfterWaitingForTransmitLock()
+    {
+        using var writeEntered = new ManualResetEventSlim();
+        using var allowWriteToFinish = new ManualResetEventSlim();
+        using var secondSendAttempted = new ManualResetEventSlim();
+        var adapter = new FakeJ2534Adapter
+        {
+            WriteEntered = writeEntered,
+            AllowWriteToFinish = allowWriteToFinish
+        };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+
+        var firstSend = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
+            TimeSpan.FromSeconds(3), CancellationToken.None, out _));
+
+        Task<bool>? secondSend = null;
+        try
+        {
+            Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(1)), "First write did not start.");
+
+            secondSend = Task.Run(() =>
+            {
+                secondSendAttempted.Set();
+                return bus.Send(0x7E0, new byte[] { 0x22, 0xF1, 0x90 }, false,
+                    TimeSpan.FromSeconds(2), CancellationToken.None, out _);
+            });
+
+            Assert.True(secondSendAttempted.Wait(TimeSpan.FromSeconds(1)),
+                "Second send did not start waiting for the transmit lock.");
+            await Task.Delay(200);
+            allowWriteToFinish.Set();
+
+            Assert.True(await firstSend.WaitAsync(TimeSpan.FromSeconds(2)));
+            Assert.True(await secondSend.WaitAsync(TimeSpan.FromSeconds(2)));
+        }
+        finally
+        {
+            allowWriteToFinish.Set();
+        }
+
+        var timeouts = adapter.WriteTimeouts;
+        Assert.Equal(2, timeouts.Length);
+        Assert.Equal(3000u, timeouts[0]);
+        Assert.InRange(timeouts[1], 1u, 1900u);
+    }
+
+    [Fact]
     public void DisposeIsIdempotentAndSendAfterDisposeThrows()
     {
         var adapter = new FakeJ2534Adapter();
@@ -226,6 +273,8 @@ public sealed class CanBusTests
         internal string WriteError { get; init; } = string.Empty;
         internal ManualResetEventSlim? WriteEntered { get; init; }
         internal ManualResetEventSlim? AllowWriteToFinish { get; init; }
+        private readonly System.Collections.Concurrent.ConcurrentQueue<uint> _writeTimeouts = new();
+        internal uint[] WriteTimeouts => _writeTimeouts.ToArray();
 
         public bool Load(string path, out string error) { error = string.Empty; return true; }
         public bool Open(out string error) { error = string.Empty; return true; }
@@ -241,6 +290,7 @@ public sealed class CanBusTests
         public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
         {
             LastMessage = msg;
+            _writeTimeouts.Enqueue(timeout);
             Interlocked.Increment(ref _writeCount);
             WriteEntered?.Set();
             AllowWriteToFinish?.Wait(TimeSpan.FromSeconds(3));
