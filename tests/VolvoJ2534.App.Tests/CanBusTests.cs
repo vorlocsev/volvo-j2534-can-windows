@@ -104,6 +104,41 @@ public sealed class CanBusTests
     }
 
     [Fact]
+    public async Task SendHonorsCancellationWhileWaitingForTransmitLock()
+    {
+        using var writeEntered = new ManualResetEventSlim();
+        using var allowWriteToFinish = new ManualResetEventSlim();
+        var adapter = new FakeJ2534Adapter
+        {
+            WriteEntered = writeEntered,
+            AllowWriteToFinish = allowWriteToFinish
+        };
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        using var cancellation = new CancellationTokenSource();
+
+        var firstSend = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x3E, 0x00 }, false,
+            TimeSpan.FromSeconds(2), CancellationToken.None, out _));
+
+        try
+        {
+            Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(1)), "First write did not start.");
+            var secondSend = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x22, 0xF1, 0x90 }, false,
+                TimeSpan.FromSeconds(2), cancellation.Token, out _));
+
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => secondSend);
+            Assert.Equal(1, adapter.WriteCount);
+        }
+        finally
+        {
+            allowWriteToFinish.Set();
+        }
+
+        Assert.True(await firstSend);
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
+    [Fact]
     public void DisposeIsIdempotentAndSendAfterDisposeThrows()
     {
         var adapter = new FakeJ2534Adapter();
