@@ -109,10 +109,55 @@ public sealed class IsoTpChannelProtocolTests
         await firstRequest.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
+    [Fact]
+    public async Task Request_TimeoutWhileWaitingForChannelGateDoesNotSendAnotherRequest()
+    {
+        using var writeEntered = new ManualResetEventSlim();
+        using var allowWriteToFinish = new ManualResetEventSlim();
+        var adapter = new BlockingWriteAdapter(writeEntered, allowWriteToFinish);
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(100),
+                RequestTimeout: TimeSpan.FromMilliseconds(150)));
+
+        var firstRequest = Task.Run(() =>
+            Assert.Throws<TimeoutException>(() => channel.Request(new byte[] { 0x22, 0xF1, 0x90 })));
+
+        try
+        {
+            Assert.True(writeEntered.Wait(TimeSpan.FromSeconds(2)), "First request did not enter the adapter write.");
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var error = Assert.Throws<TimeoutException>(() =>
+                channel.Request(new byte[] { 0x22, 0xF1, 0x91 }));
+            Assert.Contains("waiting for the channel", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromMilliseconds(500),
+                "Channel-gate timeout took longer than expected.");
+            Assert.Equal(1, adapter.WriteCount);
+        }
+        finally
+        {
+            // The fake native write deliberately ignores its timeout; always unblock it.
+            allowWriteToFinish.Set();
+        }
+
+        await firstRequest.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(1, adapter.WriteCount);
+    }
+
     private sealed class BlockingWriteAdapter : VolvoJ2534.App.IJ2534Adapter
     {
         private readonly ManualResetEventSlim _writeEntered;
         private readonly ManualResetEventSlim _allowWriteToFinish;
+        private int _writeCount;
+
+        internal int WriteCount => Volatile.Read(ref _writeCount);
 
         internal BlockingWriteAdapter(ManualResetEventSlim writeEntered, ManualResetEventSlim allowWriteToFinish)
         {
@@ -134,6 +179,7 @@ public sealed class IsoTpChannelProtocolTests
 
         public bool Write(in VolvoJ2534.App.J2534Native.PassthruMsg msg, uint timeout, out string error)
         {
+            Interlocked.Increment(ref _writeCount);
             error = string.Empty;
             _writeEntered.Set();
             _allowWriteToFinish.Wait();
