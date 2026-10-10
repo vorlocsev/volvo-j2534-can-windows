@@ -70,6 +70,30 @@ public sealed class IsoTpChannelProtocolTests
     }
 
     [Fact]
+    public void Request_PreCanceledTokenDoesNotWriteCanFrame()
+    {
+        using var writeEntered = new ManualResetEventSlim();
+        using var allowWriteToFinish = new ManualResetEventSlim();
+        var adapter = new BlockingWriteAdapter(writeEntered, allowWriteToFinish);
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0,
+                0x7E8,
+                RequestTimeout: TimeSpan.FromSeconds(1)));
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x90 }, cancellation.Token));
+        Assert.Equal(0, adapter.WriteCount);
+    }
+
+    [Fact]
     public async Task Request_CancellationWhileWaitingForChannelGateIsHonored()
     {
         using var writeEntered = new ManualResetEventSlim();
