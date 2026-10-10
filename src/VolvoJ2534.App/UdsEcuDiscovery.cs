@@ -96,6 +96,12 @@ internal sealed class UdsEcuDiscovery
         if (!IsoTp.TryDecode(frame, out var iso, out _))
             return false;
 
+        // A UDS service ID appears only at the start of an ISO-TP message.
+        // Consecutive Frames carry continuation bytes, which may coincidentally
+        // fall in the positive-response SID range and must not identify an ECU.
+        if (iso.Type is not (IsoTpFrameType.SingleFrame or IsoTpFrameType.FirstFrame))
+            return false;
+
         if (iso.Data.Length == 0)
             return false;
 
