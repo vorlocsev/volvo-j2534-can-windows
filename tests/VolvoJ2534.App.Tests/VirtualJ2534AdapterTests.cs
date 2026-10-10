@@ -193,6 +193,60 @@ public sealed class VirtualJ2534AdapterTests
     }
 
     [Fact]
+    public async Task VirtualAdapter_CancellationDoesNotPreventFollowingRequest()
+    {
+        var requestsSeen = 0;
+        using var adapter = new VirtualJ2534Adapter(request =>
+        {
+            if (request.ArbitrationId != 0x7E0 ||
+                request.Data.Length < 4 ||
+                request.Data[1] != 0x22 ||
+                request.Data[2] != 0xF1 ||
+                request.Data[3] != 0x90)
+                return Array.Empty<VolvoJ2534.App.CanFrame>();
+
+            // Leave the first request unanswered, then answer the next one.
+            if (Interlocked.Increment(ref requestsSeen) == 1)
+                return Array.Empty<VolvoJ2534.App.CanFrame>();
+
+            return new[]
+            {
+                new VolvoJ2534.App.CanFrame(
+                    0x7E8, false, false,
+                    new byte[] { 0x03, 0x62, 0xF1, 0x90 },
+                    0, 0)
+            };
+        });
+
+        using var bus = new VolvoJ2534.App.CanBus(adapter);
+        bus.Start();
+        using var channel = new VolvoJ2534.App.IsoTpChannel(
+            bus,
+            new VolvoJ2534.App.IsoTpChannel.Options(
+                0x7E0, 0x7E8,
+                FrameTimeout: TimeSpan.FromMilliseconds(500),
+                RequestTimeout: TimeSpan.FromSeconds(2)));
+
+        using var cancellation = new CancellationTokenSource();
+        var firstRequest = Task.Run(() =>
+            channel.Request(new byte[] { 0x22, 0xF1, 0x90 }, cancellation.Token));
+
+        // Ensure the first request has been transmitted before cancelling it.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+        while (adapter.TransmittedFrames == 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(5);
+
+        Assert.Equal(1, adapter.TransmittedFrames);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await firstRequest);
+
+        var response = channel.Request(new byte[] { 0x22, 0xF1, 0x90 });
+
+        Assert.Equal(new byte[] { 0x62, 0xF1, 0x90 }, response);
+        Assert.Equal(2, adapter.TransmittedFrames);
+    }
+
+    [Fact]
     public void VirtualAdapter_ReportsTimeoutWhenEcuDoesNotRespond()
     {
         using var adapter = new VirtualJ2534Adapter(_ => Array.Empty<VolvoJ2534.App.CanFrame>());
