@@ -60,6 +60,7 @@ internal sealed class IsoTpChannel : IDisposable
     private readonly CanBus _bus;
     private readonly CanRxDispatcher.Subscription _rx;
     private readonly Options _options;
+    private int _disposed;
 
     internal IsoTpChannel(CanBus bus, Options options)
     {
@@ -87,6 +88,7 @@ internal sealed class IsoTpChannel : IDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(isInterimResponse);
+        ThrowIfDisposed();
         if (payload.Length == 0 || payload.Length > IsoTp.MaxPayloadLength)
             throw new ArgumentOutOfRangeException(nameof(payload),
                 $"ISO-TP payload must be 1..{IsoTp.MaxPayloadLength} bytes.");
@@ -100,6 +102,7 @@ internal sealed class IsoTpChannel : IDisposable
         {
             while (!entered)
             {
+                ThrowIfDisposed();
                 cancellationToken.ThrowIfCancellationRequested();
                 var remaining = Remaining(deadline);
                 if (remaining <= TimeSpan.Zero)
@@ -109,6 +112,7 @@ internal sealed class IsoTpChannel : IDisposable
                 entered = Monitor.TryEnter(_requestGate, waitMilliseconds);
             }
 
+            ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
             return RequestLocked(payload, isInterimResponse, deadline, cancellationToken);
         }
@@ -437,5 +441,15 @@ internal sealed class IsoTpChannel : IDisposable
     private static long ToTimestampTicks(TimeSpan value)
         => checked((long)(value.TotalSeconds * Stopwatch.Frequency));
 
-    public void Dispose() => _rx.Dispose();
+    private void ThrowIfDisposed()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+            throw new ObjectDisposedException(nameof(IsoTpChannel));
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            _rx.Dispose();
+    }
 }
