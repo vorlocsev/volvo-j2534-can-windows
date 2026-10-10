@@ -115,14 +115,15 @@ internal sealed class UdsClient : IDisposable
         if (Volatile.Read(ref _disposed) != 0)
             throw new ObjectDisposedException(nameof(UdsClient));
 
-        var request = new byte[1 + parameters.Length];
+        var requestParameters = parameters.ToArray();
+        var request = new byte[1 + requestParameters.Length];
         request[0] = service;
-        parameters.CopyTo(request.AsSpan(1));
+        requestParameters.CopyTo(request, 1);
 
         var response = _channel.Request(
             request,
             candidate => IsResponsePending(service, candidate) ||
-                         IsUnrelatedResponse(service, parameters, candidate),
+                         IsUnrelatedResponse(service, requestParameters, candidate),
             cancellationToken);
         return ParsePositiveResponse(service, response);
     }
