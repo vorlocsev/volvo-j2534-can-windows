@@ -578,6 +578,7 @@ public sealed class IsoTpTests
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _incoming = new();
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.CanFrame> _sentFrames = new();
         private readonly AutoResetEvent _incomingReady = new(false);
+        private int _expectedRequestFrames;
 
         internal VolvoJ2534.App.CanFrame[] SentFrames => _sentFrames.ToArray();
         internal int WaitFlowControlFrames { get; init; }
@@ -603,6 +604,13 @@ public sealed class IsoTpTests
             if (VolvoJ2534.App.CanDecoder.TryDecode(msg, out var frame, out error))
             {
                 _sentFrames.Enqueue(frame);
+
+                if (_sentFrames.Count == 1 && (frame.Data[0] & 0xF0) == 0x10)
+                {
+                    var payloadLength = ((frame.Data[0] & 0x0F) << 8) | frame.Data[1];
+                    _expectedRequestFrames = 1 + Math.Max(0, (payloadLength - 6 + 6) / 7);
+                }
+
                 // Block Size=1 means the sender must request another FC
                 // after each CF while more payload remains.
                 if (_sentFrames.Count == 1 && WaitFlowControlFrames > 0)
@@ -611,11 +619,11 @@ public sealed class IsoTpTests
                         Enqueue(0x7E8, new byte[] { 0x31, 0x00, 0x00 });
                     Enqueue(0x7E8, new byte[] { 0x30, 0x00, SeparationTime });
                 }
-                else if (_sentFrames.Count is 1 or 2 or 3)
+                else if (_sentFrames.Count < _expectedRequestFrames)
                 {
                     Enqueue(0x7E8, new byte[] { 0x30, 0x01, SeparationTime });
                 }
-                else if (_sentFrames.Count == 4)
+                else if (_sentFrames.Count == _expectedRequestFrames)
                 {
                     Enqueue(0x7E8, new byte[] { 0x03, 0x62, 0xF1, 0x90 });
                 }
