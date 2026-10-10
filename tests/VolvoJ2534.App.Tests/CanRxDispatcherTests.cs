@@ -261,6 +261,31 @@ public sealed class CanRxDispatcherTests
     }
 
     [Fact]
+    public void DispatcherReportsUnexpectedOperationCanceledExceptionAndContinuesReceiving()
+    {
+        var adapter = new FakeJ2534Adapter();
+        using var dispatcher = new VolvoJ2534.App.CanRxDispatcher(adapter);
+        using var errorSeen = new ManualResetEventSlim();
+        using var subscription = dispatcher.Subscribe();
+
+        dispatcher.ReadError += error =>
+        {
+            if (error.Message.Contains("simulated adapter cancellation", StringComparison.Ordinal))
+                errorSeen.Set();
+        };
+
+        adapter.CancelNextRead();
+        dispatcher.Start();
+
+        Assert.True(errorSeen.Wait(TimeSpan.FromSeconds(2)),
+            "An unexpected OperationCanceledException from the adapter was not reported.");
+
+        adapter.Enqueue(VolvoJ2534.App.CanDecoder.Encode(0x7E8, new byte[] { 0x01, 0x00 }));
+        Assert.True(subscription.TryRead(TimeSpan.FromSeconds(2), CancellationToken.None, out var frame));
+        Assert.Equal((uint)0x7E8, frame.ArbitrationId);
+        Assert.True(adapter.ReadCount >= 2);
+    }
+
     public async Task DispatcherBacksOffWhenAdapterContinuouslyReturnsReadErrors()
     {
         var adapter = new FakeJ2534Adapter { FailReadsContinuously = true };
@@ -404,6 +429,7 @@ public sealed class CanRxDispatcherTests
         private readonly System.Collections.Concurrent.ConcurrentQueue<VolvoJ2534.App.J2534Native.PassthruMsg> _frames = new();
         private int _failNextRead;
         private int _throwNextRead;
+        private int _cancelNextRead;
         private int _activeReads;
         private int _maxConcurrentReads;
         private int _readCount;
@@ -418,6 +444,7 @@ public sealed class CanRxDispatcherTests
         internal void Enqueue(VolvoJ2534.App.J2534Native.PassthruMsg frame) => _frames.Enqueue(frame);
         internal void FailNextRead() => Interlocked.Exchange(ref _failNextRead, 1);
         internal void ThrowNextRead() => Interlocked.Exchange(ref _throwNextRead, 1);
+        internal void CancelNextRead() => Interlocked.Exchange(ref _cancelNextRead, 1);
 
         public bool Load(string path, out string error) { error = string.Empty; return true; }
         public bool Open(out string error) { error = string.Empty; return true; }
@@ -440,6 +467,9 @@ public sealed class CanRxDispatcherTests
                 AllowReadToFinish?.Wait();
                 if (Interlocked.Exchange(ref _throwNextRead, 0) != 0)
                     throw new InvalidOperationException("simulated adapter disconnect");
+
+                if (Interlocked.Exchange(ref _cancelNextRead, 0) != 0)
+                    throw new OperationCanceledException("simulated adapter cancellation");
 
                 if (FailReadsContinuously)
                 {

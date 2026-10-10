@@ -285,10 +285,17 @@ internal sealed class CanRxDispatcher : IDisposable
                 foreach (var subscriber in subscribers)
                     subscriber.Publish(frame);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
-                // Native adapter failures should be visible to the UI, but a
-                // transient exception must not silently kill the receive task.
+                // Normal shutdown: cancellation is expected only when the
+                // dispatcher itself requested it.
+                break;
+            }
+            catch (Exception ex)
+            {
+                // A vendor adapter can itself throw OperationCanceledException.
+                // Unless our token was cancelled, treat that like any other
+                // driver failure so the receive worker remains alive.
                 ReportReadError(ex);
 
                 // Avoid a hot loop if the adapter keeps throwing immediately.
