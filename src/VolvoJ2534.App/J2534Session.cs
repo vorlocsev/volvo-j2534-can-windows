@@ -3,6 +3,7 @@ namespace VolvoJ2534.App;
 internal sealed class J2534Session : IDisposable
 {
     private readonly J2534Native _j2534 = new();
+    private readonly object _lifecycleGate = new();
     private CanBus? _bus;
 
     internal event Action<Exception>? ReadError;
@@ -13,6 +14,15 @@ internal sealed class J2534Session : IDisposable
         _bus ?? throw new InvalidOperationException("J2534 CAN session is not connected.");
 
     internal bool Connect(string dllPath, uint baudRate, out string error)
+    {
+        // Serialize all transitions around the native adapter. In particular,
+        // a concurrent Disconnect must not unload the DLL while Connect is
+        // still opening the device or starting the receive worker.
+        lock (_lifecycleGate)
+            return ConnectLocked(dllPath, baudRate, out error);
+    }
+
+    private bool ConnectLocked(string dllPath, uint baudRate, out string error)
     {
         error = string.Empty;
 
@@ -68,13 +78,16 @@ internal sealed class J2534Session : IDisposable
 
     internal void Disconnect()
     {
-        if (_bus is not null)
+        lock (_lifecycleGate)
         {
-            _bus.ReadError -= HandleReadError;
-            _bus.Dispose();
-            _bus = null;
+            if (_bus is not null)
+            {
+                _bus.ReadError -= HandleReadError;
+                _bus.Dispose();
+                _bus = null;
+            }
+            _j2534.Unload();
         }
-        _j2534.Unload();
     }
 
     private void HandleReadError(Exception error)
