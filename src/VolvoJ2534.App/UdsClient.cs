@@ -59,7 +59,12 @@ internal sealed class UdsClient : IDisposable
         Span<byte> parameters = stackalloc byte[2];
         parameters[0] = (byte)(dataIdentifier >> 8);
         parameters[1] = (byte)dataIdentifier;
-        return Request((byte)UdsService.ReadDataByIdentifier, parameters, cancellationToken);
+        var data = Request((byte)UdsService.ReadDataByIdentifier, parameters, cancellationToken);
+        if (data.Length < 2 || data[0] != parameters[0] || data[1] != parameters[1])
+            throw new InvalidOperationException(
+                $"UDS ReadDataByIdentifier response did not contain requested DID 0x{dataIdentifier:X4}.");
+
+        return data;
     }
 
     internal IReadOnlyList<UdsDtcRecord> ReadDtcByStatusMask(
