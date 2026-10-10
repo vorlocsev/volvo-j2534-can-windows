@@ -227,7 +227,7 @@ public sealed class IsoTpChannelProtocolTests
             if (Interlocked.Exchange(ref _responded, 1) == 0)
             {
                 Enqueue(new byte[] { 0x03, 0x7F, 0x22, 0x78 });
-                Enqueue(new byte[] { 0x04, 0x62, 0xF1, 0x90, 0x00 });
+                Enqueue(new byte[] { 0x03, 0x62, 0xF1, 0x90 });
             }
 
             return true;
