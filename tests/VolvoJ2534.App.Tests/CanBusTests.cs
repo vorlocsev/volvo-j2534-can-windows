@@ -125,6 +125,7 @@ public sealed class CanBusTests
             var secondSend = Task.Run(() => bus.Send(0x7E0, new byte[] { 0x22, 0xF1, 0x90 }, false,
                 TimeSpan.FromSeconds(2), cancellation.Token, out _));
 
+            await Task.Delay(50); // Give the second send time to block on the held transmit lock.
             cancellation.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => secondSend);
             Assert.Equal(1, adapter.WriteCount);
