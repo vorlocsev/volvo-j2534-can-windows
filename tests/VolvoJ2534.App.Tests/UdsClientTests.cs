@@ -184,13 +184,13 @@ public sealed class UdsClientTests
         Assert.Contains("refers to service", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void ParsePositiveResponse_RejectsTruncatedNegativeResponse()
+    [Theory]
+    [InlineData(new byte[] { 0x7F })]
+    [InlineData(new byte[] { 0x7F, 0x22 })]
+    public void ParsePositiveResponse_RejectsTruncatedNegativeResponse(byte[] response)
     {
         Assert.Throws<InvalidOperationException>(() =>
-            VolvoJ2534.App.UdsClient.ParsePositiveResponse(
-                0x22,
-                new byte[] { 0x7F, 0x22 }));
+            VolvoJ2534.App.UdsClient.ParsePositiveResponse(0x22, response));
     }
 
     [Fact]
