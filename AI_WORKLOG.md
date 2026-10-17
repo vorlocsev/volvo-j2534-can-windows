@@ -1,10 +1,10 @@
-## Dvinholm v0.2.0 published — 2026-10-17
+## Dvinholm v0.2.0 stable release — Windows launch confirmed — 2026-10-18
 
-- User authorized stable v0.2.0 publication; PR #277 merged as `23d18fd4e3949530f08171218e17c84a2cf7d60a`.
-- Stable release workflow [#39047589614](https://github.com/vorlocsev/dvinholm/actions/runs/39047589614) completed successfully: Restore, Build, 479/479 tests, Publish, package ZIP and SHA-256, create stable release, verify metadata.
-- Release: [Dvinholm v0.2.0](https://github.com/vorlocsev/dvinholm/releases/tag/v0.2.0). Asset `Dvinholm-Windows-x86.zip`, 66,930,648 bytes, SHA-256 `c80e56a8cf594485cfeb82a1003907cff22c52716abf2e60e518d290b4f3deec`; checksum asset `SHA256SUMS.txt`.
-- Post-merge [main CI #39047577494](https://github.com/vorlocsev/dvinholm/actions/runs/39047577494) passed on the exact release commit.
-- Remaining validation: user should launch the exact stable ZIP on Windows; physical J2534 adapter/vehicle testing remains deferred and is not claimed.
+- User confirmed the exact published v0.2.0 Windows ZIP opens on Windows 11 LTSC IoT 26100.9550.
+- Stable release: [v0.2.0](https://github.com/vorlocsev/dvinholm/releases/tag/v0.2.0); archive SHA-256 `c80e56a8cf594485cfeb82a1003907cff22c52716abf2e60e518d290b4f3deec`.
+- Release CI passed 479 tests; latest main CI #39048794190 passed on `f889482e99565ae4093de2da3cc3c4bbe75308a2`.
+- Next manual checks: updater button/state and retry paths; no-adapter/disconnected controls, including Monitor and VIN/DTC/DID availability. Do not infer these are verified from successful launch.
+- Physical adapter/vehicle validation remains deferred; no hardware compatibility claim.
 
 ---
 
